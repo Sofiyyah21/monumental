@@ -10,8 +10,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "...",
-    "build": "...",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
     "lint": "..."
   },
   "keywords": [],
