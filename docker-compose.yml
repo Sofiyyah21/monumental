@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: monumental-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: monumental
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: monumental_db
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
