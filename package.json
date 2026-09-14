@@ -17,6 +17,7 @@
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
     "format": "prettier --write .",
+    "test:integration": "npm run test:integration -w api",
     "typecheck": "npm run typecheck --workspaces",
     "prepare": "husky"
   },
