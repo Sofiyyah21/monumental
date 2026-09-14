@@ -6,9 +6,21 @@ export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
   list = async (req: Request, res: Response) => {
-    const result = await this.productService.list(
-      Boolean(req.query.includeInactive),
-    );
+    const result = await this.productService.list(req.query);
+    res.json({ success: true, data: result });
+  };
+
+  getById = async (req: Request<{ id: string }>, res: Response) => {
+    const id = req.params.id;
+    if (!id) {
+      throw new AppError(
+        "Product id route parameter is required",
+        400,
+        "PRODUCT_ID_REQUIRED",
+      );
+    }
+
+    const result = await this.productService.getById(id);
     res.json({ success: true, data: result });
   };
 
@@ -27,6 +39,20 @@ export class ProductController {
       );
     }
     const result = await this.productService.update(id, req.body);
+    res.json({ success: true, data: result });
+  };
+
+  deactivate = async (req: Request<{ id: string }>, res: Response) => {
+    const id = req.params.id;
+    if (!id) {
+      throw new AppError(
+        "Product id route parameter is required",
+        400,
+        "PRODUCT_ID_REQUIRED",
+      );
+    }
+
+    const result = await this.productService.deactivate(id);
     res.json({ success: true, data: result });
   };
 }

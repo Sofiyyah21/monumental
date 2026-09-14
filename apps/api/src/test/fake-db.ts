@@ -21,12 +21,45 @@ type RefreshTokenRecord = {
   createdAt: Date;
 };
 
+type ProductRecord = {
+  id: string;
+  name: string;
+  sku: string;
+  category: ProductCategory;
+  unit: ProductUnit;
+  costPrice: Prisma.Decimal;
+  sellingPrice: Prisma.Decimal;
+  currentStock: Prisma.Decimal;
+  reorderLevel: Prisma.Decimal;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type UserWhere = { id?: string; email?: string };
 type UserSelect = Partial<Record<keyof UserRecord, boolean>>;
+type ProductWhere = {
+  id?: string;
+  sku?: string;
+  category?: ProductCategory;
+  unit?: ProductUnit;
+  active?: boolean;
+  OR?: Array<{
+    name?: { contains: string; mode?: "insensitive" };
+    sku?: { contains: string; mode?: "insensitive" };
+  }>;
+};
 
 function uniqueConstraintError() {
   return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
     code: "P2002",
+    clientVersion: "test",
+  });
+}
+
+function recordNotFoundError() {
+  return new Prisma.PrismaClientKnownRequestError("Record not found", {
+    code: "P2025",
     clientVersion: "test",
   });
 }
@@ -51,7 +84,7 @@ function projectUser(user: UserRecord | undefined, select?: UserSelect) {
 export function createFakeDatabase() {
   const users = new Map<string, UserRecord>();
   const refreshTokens = new Map<string, RefreshTokenRecord>();
-  const products: Array<Record<string, unknown>> = [];
+  const products = new Map<string, ProductRecord>();
   let userSequence = 1;
   let refreshTokenSequence = 1;
   let productSequence = 1;
@@ -64,6 +97,62 @@ export function createFakeDatabase() {
       return [...users.values()].find((user) => user.email === where.email);
     }
     return undefined;
+  };
+
+  const findProduct = (where: ProductWhere) => {
+    if (where.id) {
+      return products.get(where.id);
+    }
+    if (where.sku) {
+      return [...products.values()].find(
+        (product) => product.sku === where.sku,
+      );
+    }
+    return undefined;
+  };
+
+  const matchesSearchFilter = (
+    product: ProductRecord,
+    filter: NonNullable<ProductWhere["OR"]>[number],
+  ) => {
+    const [field, condition] = filter.name
+      ? (["name", filter.name] as const)
+      : (["sku", filter.sku] as const);
+    if (!condition) {
+      return false;
+    }
+
+    const actual = product[field];
+    const expected = condition.contains;
+    if (condition.mode === "insensitive") {
+      return actual.toLowerCase().includes(expected.toLowerCase());
+    }
+    return actual.includes(expected);
+  };
+
+  const matchesProductWhere = (
+    product: ProductRecord,
+    where?: ProductWhere,
+  ) => {
+    if (!where) {
+      return true;
+    }
+    if (where.category && product.category !== where.category) {
+      return false;
+    }
+    if (where.unit && product.unit !== where.unit) {
+      return false;
+    }
+    if (where.active !== undefined && product.active !== where.active) {
+      return false;
+    }
+    if (
+      where.OR &&
+      !where.OR.some((filter) => matchesSearchFilter(product, filter))
+    ) {
+      return false;
+    }
+    return true;
   };
 
   const db = {
@@ -153,30 +242,114 @@ export function createFakeDatabase() {
       },
     },
     product: {
-      async findMany() {
-        return products.map((product) => ({ ...product }));
+      async findMany(options?: { where?: ProductWhere }) {
+        return [...products.values()]
+          .filter((product) => matchesProductWhere(product, options?.where))
+          .map((product) => ({ ...product }));
+      },
+      async findUnique(options: { where: ProductWhere }) {
+        const product = findProduct(options.where);
+        return product ? { ...product } : null;
       },
       async create(options: {
         data: {
           name: string;
+          sku: string;
           category: ProductCategory;
           unit: ProductUnit;
           costPrice: number;
           sellingPrice: number;
-          lowStockThreshold: number;
+          reorderLevel: number;
         };
       }) {
+        if (findProduct({ sku: options.data.sku })) {
+          throw uniqueConstraintError();
+        }
+
         const now = new Date();
-        const product = {
+        const product: ProductRecord = {
           id: `product_${productSequence}`,
-          ...options.data,
+          name: options.data.name,
+          sku: options.data.sku,
+          category: options.data.category,
+          unit: options.data.unit,
+          costPrice: new Prisma.Decimal(options.data.costPrice),
+          sellingPrice: new Prisma.Decimal(options.data.sellingPrice),
           currentStock: new Prisma.Decimal(0),
+          reorderLevel: new Prisma.Decimal(options.data.reorderLevel),
           active: true,
           createdAt: now,
           updatedAt: now,
         };
         productSequence += 1;
-        products.push(product);
+        products.set(product.id, product);
+        return { ...product };
+      },
+      async update(options: {
+        where: ProductWhere;
+        data: Partial<{
+          name: string;
+          sku: string;
+          category: ProductCategory;
+          unit: ProductUnit;
+          costPrice: number;
+          sellingPrice: number;
+          reorderLevel: number;
+          active: boolean;
+        }>;
+      }) {
+        const product = findProduct(options.where);
+        if (!product) {
+          throw recordNotFoundError();
+        }
+        if (
+          options.data.sku &&
+          [...products.values()].some(
+            (candidate) =>
+              candidate.id !== product.id && candidate.sku === options.data.sku,
+          )
+        ) {
+          throw uniqueConstraintError();
+        }
+
+        const updatedProduct: ProductRecord = {
+          ...product,
+          ...options.data,
+          costPrice:
+            options.data.costPrice === undefined
+              ? product.costPrice
+              : new Prisma.Decimal(options.data.costPrice),
+          sellingPrice:
+            options.data.sellingPrice === undefined
+              ? product.sellingPrice
+              : new Prisma.Decimal(options.data.sellingPrice),
+          reorderLevel:
+            options.data.reorderLevel === undefined
+              ? product.reorderLevel
+              : new Prisma.Decimal(options.data.reorderLevel),
+          updatedAt: new Date(),
+        };
+        products.set(product.id, updatedProduct);
+        return { ...updatedProduct };
+      },
+      async updateMany() {
+        return { count: 0 };
+      },
+      async count(options?: { where?: ProductWhere }) {
+        return [...products.values()].filter((product) =>
+          matchesProductWhere(product, options?.where),
+        ).length;
+      },
+      async deleteMany() {
+        const count = products.size;
+        products.clear();
+        return { count };
+      },
+      async findUniqueOrThrow(options: { where: ProductWhere }) {
+        const product = findProduct(options.where);
+        if (!product) {
+          throw recordNotFoundError();
+        }
         return { ...product };
       },
     },

@@ -13,7 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "bootstrap:admin": "tsx src/bootstrap/seed.ts",
-    "test:integration": "RUN_DATABASE_TESTS=true vitest run src/test/auth.integration.test.ts"
+    "test:integration": "RUN_DATABASE_TESTS=true vitest run src/test/auth.integration.test.ts src/test/product.integration.test.ts"
   },
   "prisma": {
     "seed": "tsx src/bootstrap/seed.ts"

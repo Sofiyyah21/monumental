@@ -290,10 +290,12 @@ describe("authentication and authorization", () => {
       .set("Authorization", auth)
       .send({
         name: "Manager Drink",
-        category: "DRINK",
+        sku: "MANAGER-DRINK",
+        category: "DRINKS",
+        unit: "PACK",
         costPrice: 100,
         sellingPrice: 150,
-        lowStockThreshold: 2,
+        reorderLevel: 2,
       })
       .expect(201);
     await request(app)
@@ -333,7 +335,9 @@ describe("authentication and authorization", () => {
       .set("Authorization", auth)
       .send({
         name: "Staff Product",
-        category: "DRINK",
+        sku: "STAFF-PRODUCT",
+        category: "DRINKS",
+        unit: "PACK",
         costPrice: 100,
         sellingPrice: 150,
       })

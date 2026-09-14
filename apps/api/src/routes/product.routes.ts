@@ -25,6 +25,13 @@ export function createProductRoutes(
     validate({ query: listProductsQuerySchema }),
     asyncHandler(controller.list),
   );
+  router.get(
+    "/:id",
+    authenticateRequest,
+    authorizePermission(permissions.READ_PRODUCTS),
+    validate({ params: cuidParamSchema }),
+    asyncHandler(controller.getById),
+  );
   router.post(
     "/",
     authenticateRequest,
@@ -38,6 +45,13 @@ export function createProductRoutes(
     authorizePermission(permissions.MANAGE_PRODUCTS),
     validate({ params: cuidParamSchema, body: updateProductSchema }),
     asyncHandler(controller.update),
+  );
+  router.patch(
+    "/:id/deactivate",
+    authenticateRequest,
+    authorizePermission(permissions.MANAGE_PRODUCTS),
+    validate({ params: cuidParamSchema }),
+    asyncHandler(controller.deactivate),
   );
 
   return router;

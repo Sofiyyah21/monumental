@@ -111,7 +111,7 @@ export class ReportService {
     const lowStockProducts = inventory
       .filter(
         (product) =>
-          Number(product.currentStock) <= Number(product.lowStockThreshold),
+          Number(product.currentStock) <= Number(product.reorderLevel),
       )
       .sort((a, b) => Number(a.currentStock) - Number(b.currentStock))
       .slice(0, 10);

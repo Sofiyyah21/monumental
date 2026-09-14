@@ -26,11 +26,79 @@ export const openApiDocument = {
     schemas: {
       ProductCategory: {
         type: "string",
-        enum: ["DRINK", "NOODLES", "VEGETABLE_OIL", "SUGAR"],
+        enum: ["DRINKS", "NOODLES", "VEGETABLE_OIL", "SUGAR"],
       },
       ProductUnit: {
         type: "string",
         enum: ["PACK", "LITER", "CUP"],
+      },
+      Product: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          sku: { type: "string" },
+          category: { $ref: "#/components/schemas/ProductCategory" },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          costPrice: { type: "string", example: "100.00" },
+          sellingPrice: { type: "string", example: "150.00" },
+          currentStock: { type: "string", example: "0.000" },
+          reorderLevel: { type: "string", example: "5.000" },
+          active: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      ProductInput: {
+        type: "object",
+        required: [
+          "name",
+          "sku",
+          "category",
+          "unit",
+          "costPrice",
+          "sellingPrice",
+        ],
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 120 },
+          sku: {
+            type: "string",
+            minLength: 1,
+            maxLength: 64,
+            pattern: "^[A-Z0-9][A-Z0-9_-]*$",
+          },
+          category: { $ref: "#/components/schemas/ProductCategory" },
+          unit: {
+            $ref: "#/components/schemas/ProductUnit",
+            description:
+              "Must match category: DRINKS/NOODLES use PACK, VEGETABLE_OIL uses LITER, SUGAR uses CUP.",
+          },
+          costPrice: { type: "number", minimum: 0, multipleOf: 0.01 },
+          sellingPrice: { type: "number", minimum: 0, multipleOf: 0.01 },
+          reorderLevel: { type: "number", minimum: 0, default: 0 },
+        },
+      },
+      ProductUpdateInput: {
+        type: "object",
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 120 },
+          sku: {
+            type: "string",
+            minLength: 1,
+            maxLength: 64,
+            pattern: "^[A-Z0-9][A-Z0-9_-]*$",
+          },
+          category: { $ref: "#/components/schemas/ProductCategory" },
+          unit: {
+            $ref: "#/components/schemas/ProductUnit",
+            description:
+              "Must match category: DRINKS/NOODLES use PACK, VEGETABLE_OIL uses LITER, SUGAR uses CUP.",
+          },
+          costPrice: { type: "number", minimum: 0, multipleOf: 0.01 },
+          sellingPrice: { type: "number", minimum: 0, multipleOf: 0.01 },
+          reorderLevel: { type: "number", minimum: 0 },
+          active: { type: "boolean" },
+        },
       },
       UserRole: {
         type: "string",
@@ -164,23 +232,93 @@ export const openApiDocument = {
         tags: ["Products"],
         security: [{ bearerAuth: [] }],
         summary: "List products for internal shop users",
-        responses: { "200": { description: "Products returned" } },
+        description:
+          "Requires read:products permission. Customers cannot access this internal product-management API.",
+        parameters: [
+          {
+            name: "category",
+            in: "query",
+            schema: { $ref: "#/components/schemas/ProductCategory" },
+          },
+          {
+            name: "unit",
+            in: "query",
+            schema: { $ref: "#/components/schemas/ProductUnit" },
+          },
+          {
+            name: "active",
+            in: "query",
+            schema: { type: "boolean" },
+          },
+          {
+            name: "search",
+            in: "query",
+            schema: { type: "string", minLength: 1, maxLength: 120 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Products returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Product" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid filter",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
       },
       post: {
         tags: ["Products"],
         security: [{ bearerAuth: [] }],
-        summary: "Create a product with category-derived units",
+        summary: "Create a product",
+        description:
+          "Requires manage:products permission. ADMIN and MANAGER may create products; STAFF and CUSTOMER may not.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ProductInput" },
+            },
+          },
+        },
         responses: {
           "201": { description: "Product created" },
+          "400": {
+            description:
+              "Validation error or invalid category/unit combination",
+          },
+          "401": { description: "Authentication required" },
           "403": { description: "Manager or admin role required" },
+          "409": { description: "SKU already exists" },
         },
       },
     },
     "/products/{id}": {
-      patch: {
+      get: {
         tags: ["Products"],
         security: [{ bearerAuth: [] }],
-        summary: "Update product details",
+        summary: "Get a product by id",
+        description:
+          "Requires read:products permission. Customers cannot access this internal product-management API.",
         parameters: [
           {
             name: "id",
@@ -190,7 +328,66 @@ export const openApiDocument = {
           },
         ],
         responses: {
+          "200": { description: "Product returned" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+        },
+      },
+      patch: {
+        tags: ["Products"],
+        security: [{ bearerAuth: [] }],
+        summary: "Update product details",
+        description:
+          "Requires manage:products permission. ADMIN and MANAGER may update products; STAFF and CUSTOMER may not.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ProductUpdateInput" },
+            },
+          },
+        },
+        responses: {
           "200": { description: "Product updated" },
+          "400": {
+            description:
+              "Validation error or invalid category/unit combination",
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+          "409": { description: "SKU already exists" },
+        },
+      },
+    },
+    "/products/{id}/deactivate": {
+      patch: {
+        tags: ["Products"],
+        security: [{ bearerAuth: [] }],
+        summary: "Deactivate a product",
+        description:
+          "Requires manage:products permission. Deactivation preserves historical references and prevents later sales slices from treating the product as available.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": { description: "Product deactivated" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
           "404": { description: "Product not found" },
         },
       },
