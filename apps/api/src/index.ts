@@ -1,16 +1,8 @@
-import express from "express";
-const app = express();
+import { createApp } from "./app.js";
+import { getEnv } from "./config/env.js";
 
-app.get("/api/v1/health", (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      status: "ok",
-    },
-  });
-});
-
-const PORT = process.env.PORT || 3000;
+const app = createApp();
+const { PORT } = getEnv();
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
