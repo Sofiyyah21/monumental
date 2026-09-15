@@ -1,4 +1,5 @@
 export type ReportPeriod = "today" | "week" | "month" | "year";
+export type ReportDateRange = { start: Date; end: Date };
 
 function getZonedParts(date: Date, timeZone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -38,7 +39,7 @@ function getTimeZoneOffsetMs(date: Date, timeZone: string) {
   return utcTime - date.getTime();
 }
 
-function zonedDateTimeToUtc(
+export function zonedDateTimeToUtc(
   timeZone: string,
   year: number,
   month: number,
@@ -58,7 +59,7 @@ export function getReportDateRange(
   period: ReportPeriod,
   now = new Date(),
   timeZone = "Africa/Lagos",
-) {
+): ReportDateRange {
   const parts = getZonedParts(now, timeZone);
   const zonedTodayUtc = zonedDateTimeToUtc(
     timeZone,
@@ -136,4 +137,40 @@ export function getReportDateRange(
     start: zonedDateTimeToUtc(timeZone, parts.year, 1, 1),
     end: zonedDateTimeToUtc(timeZone, parts.year + 1, 1, 1),
   };
+}
+
+export function getCustomReportDateRange(
+  input: { from?: string; to?: string },
+  now = new Date(),
+  timeZone = "Africa/Lagos",
+): ReportDateRange {
+  const todayRange = getReportDateRange("today", now, timeZone);
+  const start = input.from
+    ? parseReportBoundary(input.from, "start", timeZone)
+    : todayRange.start;
+  const end = input.to
+    ? parseReportBoundary(input.to, "end", timeZone)
+    : todayRange.end;
+
+  return { start, end };
+}
+
+function parseReportBoundary(
+  value: string,
+  boundary: "start" | "end",
+  timeZone: string,
+) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    const dayOffset = boundary === "end" ? 1 : 0;
+    const localDate = new Date(Date.UTC(year, month - 1, day + dayOffset));
+    return zonedDateTimeToUtc(
+      timeZone,
+      localDate.getUTCFullYear(),
+      localDate.getUTCMonth() + 1,
+      localDate.getUTCDate(),
+    );
+  }
+
+  return new Date(value);
 }

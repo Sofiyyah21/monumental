@@ -103,6 +103,16 @@ type SaleWhere = {
   soldAt?: {
     gte?: Date;
     lte?: Date;
+    lt?: Date;
+  };
+};
+
+type SaleItemWhere = {
+  sale?: SaleWhere;
+  productId?: string;
+  productUnit?: ProductUnit;
+  product?: {
+    category?: ProductCategory;
   };
 };
 
@@ -334,6 +344,37 @@ export function createFakeDatabase() {
     }
     if (where.soldAt?.lte && sale.soldAt > where.soldAt.lte) {
       return false;
+    }
+    if (where.soldAt?.lt && sale.soldAt >= where.soldAt.lt) {
+      return false;
+    }
+    return true;
+  };
+
+  const matchesSaleItemWhere = (
+    item: SaleItemRecord,
+    where?: SaleItemWhere,
+  ) => {
+    if (!where) {
+      return true;
+    }
+    if (where.productId && item.productId !== where.productId) {
+      return false;
+    }
+    if (where.productUnit && item.productUnit !== where.productUnit) {
+      return false;
+    }
+    if (where.product?.category) {
+      const product = products.get(item.productId);
+      if (!product || product.category !== where.product.category) {
+        return false;
+      }
+    }
+    if (where.sale) {
+      const sale = sales.get(item.saleId);
+      if (!sale || !matchesSaleWhere(sale, where.sale)) {
+        return false;
+      }
     }
     return true;
   };
@@ -779,6 +820,35 @@ export function createFakeDatabase() {
           matchesSaleWhere(sale, options?.where),
         ).length;
       },
+      async aggregate(options: {
+        where?: SaleWhere;
+        _count?: { id?: true };
+        _sum?: Partial<Record<keyof SaleRecord, true>>;
+      }) {
+        const matchingSales = [...sales.values()].filter((sale) =>
+          matchesSaleWhere(sale, options.where),
+        );
+        const sums: Record<string, Prisma.Decimal | null> = {};
+        for (const field of Object.keys(options._sum ?? {})) {
+          sums[field] =
+            matchingSales.length === 0
+              ? null
+              : matchingSales.reduce(
+                  (sum, sale) =>
+                    sum.plus(
+                      (sale as unknown as Record<string, Prisma.Decimal>)[
+                        field
+                      ],
+                    ),
+                  new Prisma.Decimal(0),
+                );
+        }
+
+        return {
+          _count: { id: options._count?.id ? matchingSales.length : 0 },
+          _sum: sums,
+        };
+      },
       async deleteMany(options?: { where?: SaleWhere }) {
         const matchingIds = [...sales.values()]
           .filter((sale) => matchesSaleWhere(sale, options?.where))
@@ -792,6 +862,69 @@ export function createFakeDatabase() {
           }
         }
         return { count: matchingIds.length };
+      },
+    },
+    saleItem: {
+      async aggregate(options: {
+        where?: SaleItemWhere;
+        _sum?: Partial<Record<keyof SaleItemRecord, true>>;
+      }) {
+        const matchingItems = [...saleItems.values()].filter((item) =>
+          matchesSaleItemWhere(item, options.where),
+        );
+        const sums: Record<string, Prisma.Decimal | null> = {};
+        for (const field of Object.keys(options._sum ?? {})) {
+          sums[field] =
+            matchingItems.length === 0
+              ? null
+              : matchingItems.reduce(
+                  (sum, item) =>
+                    sum.plus(
+                      (item as unknown as Record<string, Prisma.Decimal>)[
+                        field
+                      ],
+                    ),
+                  new Prisma.Decimal(0),
+                );
+        }
+
+        return { _sum: sums };
+      },
+      async groupBy(options: {
+        by: Array<"productId" | "productName" | "productUnit">;
+        where?: SaleItemWhere;
+        _sum?: Partial<Record<keyof SaleItemRecord, true>>;
+      }) {
+        const groups = new Map<string, SaleItemRecord[]>();
+        for (const item of saleItems.values()) {
+          if (!matchesSaleItemWhere(item, options.where)) {
+            continue;
+          }
+
+          const key = options.by.map((field) => item[field]).join("::");
+          groups.set(key, [...(groups.get(key) ?? []), item]);
+        }
+
+        return [...groups.values()].map((items) => {
+          const [firstItem] = items;
+          const sums: Record<string, Prisma.Decimal | null> = {};
+          for (const field of Object.keys(options._sum ?? {})) {
+            sums[field] = items.reduce(
+              (sum, item) =>
+                sum.plus(
+                  (item as unknown as Record<string, Prisma.Decimal>)[field],
+                ),
+              new Prisma.Decimal(0),
+            );
+          }
+
+          return {
+            productId: firstItem!.productId,
+            productName: firstItem!.productName,
+            productUnit: firstItem!.productUnit,
+            _sum: sums,
+          };
+        });
       },
     },
     async $queryRaw() {

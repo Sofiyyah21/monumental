@@ -268,6 +268,100 @@ export const openApiDocument = {
           },
         },
       },
+      ReportDateRange: {
+        type: "object",
+        properties: {
+          start: { type: "string", format: "date-time" },
+          end: {
+            type: "string",
+            format: "date-time",
+            description: "Exclusive upper bound.",
+          },
+        },
+      },
+      SalesSummaryReport: {
+        type: "object",
+        properties: {
+          period: { type: "string", example: "today" },
+          range: { $ref: "#/components/schemas/ReportDateRange" },
+          salesCount: { type: "integer", example: 3 },
+          unitsSold: { type: "string", example: "12.000" },
+          revenue: { type: "string", example: "1200.00" },
+          cogs: { type: "string", example: "800.00" },
+          grossProfit: {
+            type: "string",
+            example: "400.00",
+            description:
+              "Sales-based gross profit only: revenue minus cost of goods sold.",
+          },
+          discounts: { type: "string", example: "50.00" },
+          averageSaleValue: { type: "string", example: "400.00" },
+        },
+      },
+      ProductSalesReportItem: {
+        type: "object",
+        properties: {
+          productId: { type: "string" },
+          productName: {
+            type: "string",
+            description: "Historical sale item product-name snapshot.",
+          },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          quantitySold: { type: "string", example: "12.000" },
+          revenue: { type: "string", example: "1200.00" },
+          cogs: { type: "string", example: "800.00" },
+          grossProfit: { type: "string", example: "400.00" },
+        },
+      },
+      BestSellerReportItem: {
+        allOf: [
+          { $ref: "#/components/schemas/ProductSalesReportItem" },
+          {
+            type: "object",
+            properties: {
+              rank: { type: "integer", example: 1 },
+            },
+          },
+        ],
+      },
+      StockStatus: {
+        type: "string",
+        enum: ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"],
+      },
+      LowStockReportItem: {
+        type: "object",
+        properties: {
+          productId: { type: "string" },
+          name: { type: "string" },
+          sku: { type: "string" },
+          category: { $ref: "#/components/schemas/ProductCategory" },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          currentStock: { type: "string", example: "2.000" },
+          reorderLevel: { type: "string", example: "5.000" },
+          stockStatus: { $ref: "#/components/schemas/StockStatus" },
+        },
+      },
+      InventorySummaryReport: {
+        type: "object",
+        properties: {
+          totalActiveProducts: { type: "integer", example: 12 },
+          lowStockProductCount: { type: "integer", example: 2 },
+          outOfStockProductCount: { type: "integer", example: 1 },
+          stockByUnit: {
+            type: "array",
+            description:
+              "Current stock aggregated separately by unit to avoid mixing packs, liters, and cups.",
+            items: {
+              type: "object",
+              properties: {
+                unit: { $ref: "#/components/schemas/ProductUnit" },
+                productCount: { type: "integer", example: 4 },
+                currentStock: { type: "string", example: "25.000" },
+              },
+            },
+          },
+        },
+      },
       ErrorResponse: {
         type: "object",
         properties: {
@@ -924,6 +1018,8 @@ export const openApiDocument = {
         tags: ["Reports"],
         security: [{ bearerAuth: [] }],
         summary: "Get sales, cost, and gross profit summary by period",
+        description:
+          "Requires read:reports permission. Uses the configured business timezone for period boundaries. Only COMPLETED sales contribute to financial totals.",
         parameters: [
           {
             name: "period",
@@ -935,7 +1031,322 @@ export const openApiDocument = {
             },
           },
         ],
-        responses: { "200": { description: "Summary returned" } },
+        responses: {
+          "200": {
+            description: "Summary returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/SalesSummaryReport" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/today": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get today's sales summary",
+        description:
+          "Requires read:reports permission. Today is calculated in the business timezone.",
+        responses: {
+          "200": {
+            description: "Summary returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/SalesSummaryReport" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/week": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get this week's sales summary",
+        description:
+          "Requires read:reports permission. Weeks start on Monday in the business timezone.",
+        responses: {
+          "200": { description: "Summary returned" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/month": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get this month's sales summary",
+        description:
+          "Requires read:reports permission. Month boundaries use the business timezone.",
+        responses: {
+          "200": { description: "Summary returned" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/year": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get this year's sales summary",
+        description:
+          "Requires read:reports permission. Year boundaries use the business timezone.",
+        responses: {
+          "200": { description: "Summary returned" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/sales": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get a custom date-range sales summary",
+        description:
+          "Requires read:reports permission. Date-only from/to values are interpreted in the business timezone. Gross profit is sales-based gross profit, not full accounting profit.",
+        parameters: [
+          {
+            name: "from",
+            in: "query",
+            schema: { type: "string", example: "2026-09-15" },
+          },
+          {
+            name: "to",
+            in: "query",
+            schema: { type: "string", example: "2026-09-15" },
+          },
+          { name: "sellerId", in: "query", schema: { type: "string" } },
+          {
+            name: "status",
+            in: "query",
+            schema: { $ref: "#/components/schemas/SaleStatus" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Summary returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/SalesSummaryReport" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid report filters" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/products": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get product sales for a date range",
+        description:
+          "Requires read:reports permission. Uses SaleItem historical snapshots for product name, unit, revenue, COGS, and gross profit.",
+        parameters: [
+          {
+            name: "from",
+            in: "query",
+            schema: { type: "string", example: "2026-09-01" },
+          },
+          {
+            name: "to",
+            in: "query",
+            schema: { type: "string", example: "2026-09-30" },
+          },
+          { name: "productId", in: "query", schema: { type: "string" } },
+          {
+            name: "category",
+            in: "query",
+            schema: { $ref: "#/components/schemas/ProductCategory" },
+          },
+          {
+            name: "unit",
+            in: "query",
+            schema: { $ref: "#/components/schemas/ProductUnit" },
+          },
+          { name: "sellerId", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          "200": {
+            description: "Product sales returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        range: { $ref: "#/components/schemas/ReportDateRange" },
+                        products: {
+                          type: "array",
+                          items: {
+                            $ref: "#/components/schemas/ProductSalesReportItem",
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid report filters" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/best-sellers": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get best-selling products",
+        description:
+          "Requires read:reports permission. Products are ranked by quantity sold by default.",
+        parameters: [
+          {
+            name: "from",
+            in: "query",
+            schema: { type: "string", example: "2026-09-01" },
+          },
+          {
+            name: "to",
+            in: "query",
+            schema: { type: "string", example: "2026-09-30" },
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 25 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Best sellers returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        rankingMetric: {
+                          type: "string",
+                          example: "quantitySold",
+                        },
+                        products: {
+                          type: "array",
+                          items: {
+                            $ref: "#/components/schemas/BestSellerReportItem",
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid report filters" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/low-stock": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get low-stock and out-of-stock products",
+        description:
+          "Requires read:reports permission. LOW_STOCK means current stock is above zero and at or below reorder level.",
+        responses: {
+          "200": {
+            description: "Low-stock products returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "array",
+                      items: {
+                        $ref: "#/components/schemas/LowStockReportItem",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/reports/inventory": {
+      get: {
+        tags: ["Reports"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get inventory summary",
+        description:
+          "Requires read:reports permission. Stock quantities are grouped by unit so packs, liters, and cups are not mixed into one total.",
+        responses: {
+          "200": {
+            description: "Inventory summary returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      $ref: "#/components/schemas/InventorySummaryReport",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
       },
     },
     "/reports/dashboard": {
