@@ -1,6 +1,10 @@
-import { PaymentMethod } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, SaleStatus } from "@prisma/client";
 import { z } from "zod";
-import { positiveMoneySchema, positiveQuantitySchema } from "./common.js";
+import {
+  nonNegativeMoneySchema,
+  paginationQuerySchema,
+  positiveQuantitySchema,
+} from "./common.js";
 
 export const createSaleSchema = z.object({
   customerId: z.string().min(1).optional(),
@@ -10,19 +14,45 @@ export const createSaleSchema = z.object({
     PaymentMethod.CARD,
     PaymentMethod.OTHER,
   ]),
+  paymentStatus: z
+    .enum([PaymentStatus.PAID, PaymentStatus.PENDING])
+    .default(PaymentStatus.PAID),
   paymentReference: z.string().trim().max(120).optional(),
+  discountAmount: nonNegativeMoneySchema.default(0),
   soldAt: z.coerce.date().optional(),
   items: z
     .array(
       z.object({
         productId: z.string().min(1),
         quantity: positiveQuantitySchema,
-        unitPrice: positiveMoneySchema.optional(),
       }),
     )
     .min(1),
 });
 
-export const listSalesQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(25),
+export const listSalesQuerySchema = paginationQuerySchema
+  .extend({
+    sellerId: z.string().min(1).optional(),
+    customerId: z.string().min(1).optional(),
+    status: z
+      .enum([SaleStatus.COMPLETED, SaleStatus.VOIDED, SaleStatus.REFUNDED])
+      .optional(),
+    paymentStatus: z
+      .enum([PaymentStatus.PAID, PaymentStatus.PENDING])
+      .optional(),
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  .superRefine((data, context) => {
+    if (data.from && data.to && data.from > data.to) {
+      context.addIssue({
+        code: "custom",
+        path: ["to"],
+        message: "End date must be after start date",
+      });
+    }
+  });
+
+export const saleIdParamSchema = z.object({
+  id: z.string().min(1),
 });

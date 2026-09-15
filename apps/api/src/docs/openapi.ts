@@ -32,6 +32,10 @@ export const openApiDocument = {
         type: "string",
         enum: ["PACK", "LITER", "CUP"],
       },
+      StockMovementType: {
+        type: "string",
+        enum: ["RECEIVED", "SOLD", "ADJUSTMENT", "RETURN", "DAMAGE"],
+      },
       Product: {
         type: "object",
         properties: {
@@ -100,6 +104,86 @@ export const openApiDocument = {
           active: { type: "boolean" },
         },
       },
+      InventoryItem: {
+        type: "object",
+        properties: {
+          productId: { type: "string" },
+          name: { type: "string" },
+          sku: { type: "string" },
+          category: { $ref: "#/components/schemas/ProductCategory" },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          currentStock: { type: "string", example: "12.000" },
+          reorderLevel: { type: "string", example: "5.000" },
+          lowStock: { type: "boolean" },
+          active: { type: "boolean" },
+        },
+      },
+      StockMovement: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          productId: { type: "string" },
+          type: { $ref: "#/components/schemas/StockMovementType" },
+          quantity: { type: "string", example: "5.000" },
+          previousStock: { type: "string", example: "10.000" },
+          newStock: { type: "string", example: "15.000" },
+          unitCost: { type: "string", nullable: true, example: "95.00" },
+          reference: { type: "string", nullable: true },
+          note: { type: "string", nullable: true },
+          saleId: { type: "string", nullable: true },
+          createdById: { type: "string", nullable: true },
+          occurredAt: { type: "string", format: "date-time" },
+        },
+      },
+      StockReceiptInput: {
+        type: "object",
+        required: ["productId", "quantity", "unit"],
+        properties: {
+          productId: { type: "string" },
+          quantity: { type: "number", exclusiveMinimum: 0 },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          unitCost: { type: "number", minimum: 0, multipleOf: 0.01 },
+          reference: { type: "string", minLength: 1, maxLength: 120 },
+          note: { type: "string", maxLength: 500 },
+        },
+      },
+      StockReturnInput: {
+        type: "object",
+        required: ["productId", "quantity", "unit"],
+        properties: {
+          productId: { type: "string" },
+          quantity: { type: "number", exclusiveMinimum: 0 },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          reference: { type: "string", minLength: 1, maxLength: 120 },
+          note: { type: "string", maxLength: 500 },
+        },
+      },
+      StockAdjustmentInput: {
+        type: "object",
+        required: ["productId", "quantityChange", "unit", "reason"],
+        properties: {
+          productId: { type: "string" },
+          quantityChange: {
+            type: "number",
+            description:
+              "Positive values increase stock; negative values reduce stock. Zero is rejected.",
+          },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          reason: { type: "string", minLength: 1, maxLength: 500 },
+          reference: { type: "string", minLength: 1, maxLength: 120 },
+        },
+      },
+      StockDamageInput: {
+        type: "object",
+        required: ["productId", "quantity", "unit", "reason"],
+        properties: {
+          productId: { type: "string" },
+          quantity: { type: "number", exclusiveMinimum: 0 },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          reason: { type: "string", minLength: 1, maxLength: 500 },
+          reference: { type: "string", minLength: 1, maxLength: 120 },
+        },
+      },
       UserRole: {
         type: "string",
         enum: ["ADMIN", "MANAGER", "STAFF", "CUSTOMER"],
@@ -107,6 +191,82 @@ export const openApiDocument = {
       PaymentMethod: {
         type: "string",
         enum: ["CASH", "TRANSFER", "CARD", "OTHER"],
+      },
+      PaymentStatus: {
+        type: "string",
+        enum: ["PAID", "PENDING"],
+      },
+      SaleStatus: {
+        type: "string",
+        enum: ["COMPLETED", "VOIDED", "REFUNDED"],
+      },
+      SaleItem: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          saleId: { type: "string" },
+          productId: { type: "string" },
+          productName: { type: "string" },
+          productUnit: { $ref: "#/components/schemas/ProductUnit" },
+          quantity: { type: "string", example: "2.000" },
+          unitPrice: { type: "string", example: "150.00" },
+          unitCost: { type: "string", example: "100.00" },
+          lineTotal: { type: "string", example: "300.00" },
+          lineCost: { type: "string", example: "200.00" },
+          grossProfit: { type: "string", example: "100.00" },
+        },
+      },
+      Sale: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          reference: { type: "string", example: "MD-20260915-00001" },
+          sellerId: { type: "string" },
+          customerId: { type: "string", nullable: true },
+          status: { $ref: "#/components/schemas/SaleStatus" },
+          paymentMethod: { $ref: "#/components/schemas/PaymentMethod" },
+          paymentStatus: { $ref: "#/components/schemas/PaymentStatus" },
+          paymentReference: { type: "string", nullable: true },
+          subtotal: { type: "string", example: "300.00" },
+          discountAmount: { type: "string", example: "0.00" },
+          totalAmount: { type: "string", example: "300.00" },
+          totalCost: { type: "string", example: "200.00" },
+          grossProfit: { type: "string", example: "100.00" },
+          soldAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SaleItem" },
+          },
+        },
+      },
+      SaleInput: {
+        type: "object",
+        required: ["paymentMethod", "items"],
+        properties: {
+          customerId: { type: "string" },
+          paymentMethod: { $ref: "#/components/schemas/PaymentMethod" },
+          paymentStatus: {
+            $ref: "#/components/schemas/PaymentStatus",
+            default: "PAID",
+          },
+          paymentReference: { type: "string", maxLength: 120 },
+          discountAmount: { type: "number", minimum: 0, multipleOf: 0.01 },
+          soldAt: { type: "string", format: "date-time" },
+          items: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              required: ["productId", "quantity"],
+              properties: {
+                productId: { type: "string" },
+                quantity: { type: "number", exclusiveMinimum: 0 },
+              },
+            },
+          },
+        },
       },
       ErrorResponse: {
         type: "object",
@@ -392,12 +552,141 @@ export const openApiDocument = {
         },
       },
     },
+    "/inventory": {
+      get: {
+        tags: ["Inventory"],
+        security: [{ bearerAuth: [] }],
+        summary: "List current inventory balances",
+        description:
+          "Requires read:inventory permission. Returns Product.currentStock as the maintained current balance with low-stock status.",
+        parameters: [
+          {
+            name: "active",
+            in: "query",
+            schema: { type: "boolean" },
+          },
+          {
+            name: "lowStock",
+            in: "query",
+            schema: { type: "boolean" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Inventory returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/InventoryItem" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/inventory/low-stock": {
+      get: {
+        tags: ["Inventory"],
+        security: [{ bearerAuth: [] }],
+        summary: "List low-stock products",
+        description:
+          "Requires read:inventory permission. Low stock means currentStock is less than or equal to reorderLevel.",
+        responses: {
+          "200": { description: "Low-stock products returned" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+    },
+    "/inventory/products/{productId}": {
+      get: {
+        tags: ["Inventory"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get current stock by product",
+        description:
+          "Requires read:inventory permission. Customers cannot access internal inventory APIs.",
+        parameters: [
+          {
+            name: "productId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": { description: "Current stock returned" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+        },
+      },
+    },
     "/inventory/movements": {
       get: {
         tags: ["Inventory"],
         security: [{ bearerAuth: [] }],
         summary: "List stock movement history",
-        responses: { "200": { description: "Movements returned" } },
+        description:
+          "Requires read:inventory permission. Supports product, type, and date range filtering.",
+        parameters: [
+          {
+            name: "productId",
+            in: "query",
+            schema: { type: "string" },
+          },
+          {
+            name: "type",
+            in: "query",
+            schema: { $ref: "#/components/schemas/StockMovementType" },
+          },
+          {
+            name: "from",
+            in: "query",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "to",
+            in: "query",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 25 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Movements returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/StockMovement" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid filter" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
       },
     },
     "/inventory/receive": {
@@ -405,16 +694,48 @@ export const openApiDocument = {
         tags: ["Inventory"],
         security: [{ bearerAuth: [] }],
         summary: "Receive stock and create an audit movement",
-        responses: { "201": { description: "Stock received" } },
+        description:
+          "Requires manage:inventory permission. Updates Product.currentStock and creates a RECEIVED stock movement transactionally.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/StockReceiptInput" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Stock received" },
+          "400": { description: "Validation error or unit mismatch" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+        },
       },
     },
     "/inventory/adjust": {
       post: {
         tags: ["Inventory"],
         security: [{ bearerAuth: [] }],
-        summary:
-          "Adjust stock to a counted quantity and create an audit movement",
-        responses: { "201": { description: "Stock adjusted" } },
+        summary: "Apply a stock adjustment delta",
+        description:
+          "Requires manage:inventory permission. Uses quantityChange rather than arbitrary balance overwrite and creates an ADJUSTMENT movement.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/StockAdjustmentInput" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Stock adjusted" },
+          "400": { description: "Validation error or unit mismatch" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+          "409": { description: "Adjustment would make stock negative" },
+        },
       },
     },
     "/inventory/returns": {
@@ -422,24 +743,179 @@ export const openApiDocument = {
         tags: ["Inventory"],
         security: [{ bearerAuth: [] }],
         summary: "Return stock to inventory and create an audit movement",
-        responses: { "201": { description: "Stock returned" } },
+        description:
+          "Requires manage:inventory permission. This records returned stock only; refund/payment processing belongs to sales returns.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/StockReturnInput" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Stock returned" },
+          "400": { description: "Validation error or unit mismatch" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+        },
+      },
+    },
+    "/inventory/damage": {
+      post: {
+        tags: ["Inventory"],
+        security: [{ bearerAuth: [] }],
+        summary: "Record damaged stock",
+        description:
+          "Requires manage:inventory permission. Decrements stock and creates a DAMAGE movement with a required reason.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/StockDamageInput" },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Damaged stock recorded" },
+          "400": { description: "Validation error or unit mismatch" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product not found" },
+          "409": { description: "Damage quantity would make stock negative" },
+        },
       },
     },
     "/sales": {
       get: {
         tags: ["Sales"],
         security: [{ bearerAuth: [] }],
-        summary: "List recent sales",
-        responses: { "200": { description: "Sales returned" } },
+        summary: "List sales",
+        description:
+          "Requires read:sales permission. Supports basic operational filters; analytics are handled by reporting endpoints.",
+        parameters: [
+          { name: "sellerId", in: "query", schema: { type: "string" } },
+          { name: "customerId", in: "query", schema: { type: "string" } },
+          {
+            name: "status",
+            in: "query",
+            schema: { $ref: "#/components/schemas/SaleStatus" },
+          },
+          {
+            name: "paymentStatus",
+            in: "query",
+            schema: { $ref: "#/components/schemas/PaymentStatus" },
+          },
+          {
+            name: "from",
+            in: "query",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "to",
+            in: "query",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 25 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Sales returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Sale" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid filter" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
       },
       post: {
         tags: ["Sales"],
         security: [{ bearerAuth: [] }],
-        summary:
-          "Record a sale, calculate financials, and decrement inventory transactionally",
+        summary: "Record a completed POS sale",
+        description:
+          "Requires create:sales permission. Prices are loaded from the database; clients submit product IDs and quantities. Creates SaleItems and SOLD stock movements transactionally.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SaleInput" },
+            },
+          },
+        },
         responses: {
-          "201": { description: "Sale recorded" },
+          "201": {
+            description: "Sale recorded",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Sale" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error or invalid discount" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Product or customer not found" },
           "409": { description: "Insufficient stock" },
+        },
+      },
+    },
+    "/sales/{id}": {
+      get: {
+        tags: ["Sales"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get a sale by id",
+        description:
+          "Requires read:sales permission. Returned items include historical product snapshots.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Sale returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Sale" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Sale not found" },
         },
       },
     },

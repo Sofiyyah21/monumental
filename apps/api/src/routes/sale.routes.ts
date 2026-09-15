@@ -8,6 +8,7 @@ import { validate } from "../middleware/validate.js";
 import {
   createSaleSchema,
   listSalesQuerySchema,
+  saleIdParamSchema,
 } from "../validation/sale.schema.js";
 
 export function createSaleRoutes(
@@ -22,6 +23,13 @@ export function createSaleRoutes(
     authorizePermission(permissions.READ_SALES),
     validate({ query: listSalesQuerySchema }),
     asyncHandler(controller.list),
+  );
+  router.get(
+    "/:id",
+    authenticateRequest,
+    authorizePermission(permissions.READ_SALES),
+    validate({ params: saleIdParamSchema }),
+    asyncHandler(controller.getById),
   );
   router.post(
     "/",

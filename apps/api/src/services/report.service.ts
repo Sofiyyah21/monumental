@@ -2,6 +2,7 @@ import { SaleStatus } from "@prisma/client";
 import { getEnv } from "../config/env.js";
 import type { DatabaseClient } from "../lib/database.js";
 import { getReportDateRange, type ReportPeriod } from "../lib/date-range.js";
+import { isLowStock } from "./inventory-rules.js";
 
 export class ReportService {
   constructor(private readonly db: DatabaseClient) {}
@@ -109,10 +110,7 @@ export class ReportService {
       ]);
 
     const lowStockProducts = inventory
-      .filter(
-        (product) =>
-          Number(product.currentStock) <= Number(product.reorderLevel),
-      )
+      .filter((product) => isLowStock(product))
       .sort((a, b) => Number(a.currentStock) - Number(b.currentStock))
       .slice(0, 10);
     const bestSellingProducts = year.products.slice(0, 5);

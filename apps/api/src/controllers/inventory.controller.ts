@@ -32,9 +32,37 @@ export class InventoryController {
     res.status(201).json({ success: true, data: result });
   };
 
+  recordDamage = async (req: Request, res: Response) => {
+    const userId = this.requireUserId(req);
+    const result = await this.inventoryService.recordDamage({
+      ...req.body,
+      userId,
+    });
+    res.status(201).json({ success: true, data: result });
+  };
+
+  listInventory = async (req: Request, res: Response) => {
+    const result = await this.inventoryService.listInventory(req.query);
+    res.json({ success: true, data: result });
+  };
+
+  getCurrentStock = async (
+    req: Request<{ productId: string }>,
+    res: Response,
+  ) => {
+    const result = await this.inventoryService.getCurrentStock(
+      req.params.productId,
+    );
+    res.json({ success: true, data: result });
+  };
+
+  listLowStockProducts = async (_req: Request, res: Response) => {
+    const result = await this.inventoryService.listLowStockProducts();
+    res.json({ success: true, data: result });
+  };
+
   listMovements = async (req: Request, res: Response) => {
-    const limit = Number(req.query.limit ?? 50);
-    const result = await this.inventoryService.listMovements(limit);
+    const result = await this.inventoryService.listMovements(req.query);
     res.json({ success: true, data: result });
   };
 

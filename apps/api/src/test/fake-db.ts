@@ -1,4 +1,13 @@
-import { Prisma, ProductCategory, ProductUnit, UserRole } from "@prisma/client";
+import {
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+  ProductCategory,
+  ProductUnit,
+  SaleStatus,
+  StockMovementType,
+  UserRole,
+} from "@prisma/client";
 import type { DatabaseClient } from "../lib/database.js";
 
 type UserRecord = {
@@ -39,8 +48,9 @@ type ProductRecord = {
 type UserWhere = { id?: string; email?: string };
 type UserSelect = Partial<Record<keyof UserRecord, boolean>>;
 type ProductWhere = {
-  id?: string;
+  id?: string | { in?: string[] };
   sku?: string;
+  currentStock?: { gte?: Prisma.Decimal };
   category?: ProductCategory;
   unit?: ProductUnit;
   active?: boolean;
@@ -48,6 +58,77 @@ type ProductWhere = {
     name?: { contains: string; mode?: "insensitive" };
     sku?: { contains: string; mode?: "insensitive" };
   }>;
+};
+
+type SaleRecord = {
+  id: string;
+  reference: string;
+  sellerId: string;
+  customerId: string | null;
+  status: SaleStatus;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  paymentReference: string | null;
+  subtotal: Prisma.Decimal;
+  discountAmount: Prisma.Decimal;
+  totalAmount: Prisma.Decimal;
+  totalCost: Prisma.Decimal;
+  grossProfit: Prisma.Decimal;
+  soldAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type SaleItemRecord = {
+  id: string;
+  saleId: string;
+  productId: string;
+  productName: string;
+  productUnit: ProductUnit;
+  quantity: Prisma.Decimal;
+  unitPrice: Prisma.Decimal;
+  unitCost: Prisma.Decimal;
+  lineTotal: Prisma.Decimal;
+  lineCost: Prisma.Decimal;
+  grossProfit: Prisma.Decimal;
+};
+
+type SaleWhere = {
+  id?: string;
+  reference?: string;
+  sellerId?: string;
+  customerId?: string;
+  status?: SaleStatus;
+  paymentStatus?: PaymentStatus;
+  soldAt?: {
+    gte?: Date;
+    lte?: Date;
+  };
+};
+
+type StockMovementRecord = {
+  id: string;
+  productId: string;
+  type: StockMovementType;
+  quantity: Prisma.Decimal;
+  previousStock: Prisma.Decimal;
+  newStock: Prisma.Decimal;
+  unitCost: Prisma.Decimal | null;
+  reference: string | null;
+  note: string | null;
+  saleId: string | null;
+  createdById: string | null;
+  occurredAt: Date;
+};
+
+type StockMovementWhere = {
+  productId?: string;
+  type?: StockMovementType;
+  saleId?: string;
+  occurredAt?: {
+    gte?: Date;
+    lte?: Date;
+  };
 };
 
 function uniqueConstraintError() {
@@ -85,9 +166,16 @@ export function createFakeDatabase() {
   const users = new Map<string, UserRecord>();
   const refreshTokens = new Map<string, RefreshTokenRecord>();
   const products = new Map<string, ProductRecord>();
+  const stockMovements = new Map<string, StockMovementRecord>();
+  const sales = new Map<string, SaleRecord>();
+  const saleItems = new Map<string, SaleItemRecord>();
   let userSequence = 1;
   let refreshTokenSequence = 1;
   let productSequence = 1;
+  let stockMovementSequence = 1;
+  let saleSequence = 1;
+  let saleItemSequence = 1;
+  let saleReferenceSequence = 1;
 
   const findUser = (where: UserWhere) => {
     if (where.id) {
@@ -100,7 +188,7 @@ export function createFakeDatabase() {
   };
 
   const findProduct = (where: ProductWhere) => {
-    if (where.id) {
+    if (typeof where.id === "string") {
       return products.get(where.id);
     }
     if (where.sku) {
@@ -109,6 +197,19 @@ export function createFakeDatabase() {
       );
     }
     return undefined;
+  };
+
+  const productIdMatches = (
+    product: ProductRecord,
+    id?: ProductWhere["id"],
+  ) => {
+    if (!id) {
+      return true;
+    }
+    if (typeof id === "string") {
+      return product.id === id;
+    }
+    return id.in?.includes(product.id) ?? true;
   };
 
   const matchesSearchFilter = (
@@ -137,6 +238,9 @@ export function createFakeDatabase() {
     if (!where) {
       return true;
     }
+    if (!productIdMatches(product, where.id)) {
+      return false;
+    }
     if (where.category && product.category !== where.category) {
       return false;
     }
@@ -147,6 +251,12 @@ export function createFakeDatabase() {
       return false;
     }
     if (
+      where.currentStock?.gte &&
+      new Prisma.Decimal(product.currentStock).lt(where.currentStock.gte)
+    ) {
+      return false;
+    }
+    if (
       where.OR &&
       !where.OR.some((filter) => matchesSearchFilter(product, filter))
     ) {
@@ -154,6 +264,102 @@ export function createFakeDatabase() {
     }
     return true;
   };
+
+  const matchesStockMovementWhere = (
+    movement: StockMovementRecord,
+    where?: StockMovementWhere,
+  ) => {
+    if (!where) {
+      return true;
+    }
+    if (where.productId && movement.productId !== where.productId) {
+      return false;
+    }
+    if (where.type && movement.type !== where.type) {
+      return false;
+    }
+    if (where.saleId && movement.saleId !== where.saleId) {
+      return false;
+    }
+    if (where.occurredAt?.gte && movement.occurredAt < where.occurredAt.gte) {
+      return false;
+    }
+    if (where.occurredAt?.lte && movement.occurredAt > where.occurredAt.lte) {
+      return false;
+    }
+    return true;
+  };
+
+  const includeStockMovementRelations = (
+    movement: StockMovementRecord,
+    include?: {
+      product?: boolean;
+      createdBy?: { select?: Partial<Record<keyof UserRecord, boolean>> };
+    },
+  ) => ({
+    ...movement,
+    product: include?.product
+      ? { ...products.get(movement.productId)! }
+      : undefined,
+    createdBy:
+      include?.createdBy && movement.createdById
+        ? projectUser(users.get(movement.createdById), include.createdBy.select)
+        : undefined,
+  });
+
+  const matchesSaleWhere = (sale: SaleRecord, where?: SaleWhere) => {
+    if (!where) {
+      return true;
+    }
+    if (where.id && sale.id !== where.id) {
+      return false;
+    }
+    if (where.reference && sale.reference !== where.reference) {
+      return false;
+    }
+    if (where.sellerId && sale.sellerId !== where.sellerId) {
+      return false;
+    }
+    if (where.customerId && sale.customerId !== where.customerId) {
+      return false;
+    }
+    if (where.status && sale.status !== where.status) {
+      return false;
+    }
+    if (where.paymentStatus && sale.paymentStatus !== where.paymentStatus) {
+      return false;
+    }
+    if (where.soldAt?.gte && sale.soldAt < where.soldAt.gte) {
+      return false;
+    }
+    if (where.soldAt?.lte && sale.soldAt > where.soldAt.lte) {
+      return false;
+    }
+    return true;
+  };
+
+  const includeSaleRelations = (
+    sale: SaleRecord,
+    include?: {
+      seller?: { select?: UserSelect };
+      customer?: { select?: UserSelect };
+      items?: boolean;
+    },
+  ) => ({
+    ...sale,
+    seller: include?.seller
+      ? projectUser(users.get(sale.sellerId), include.seller.select)
+      : undefined,
+    customer:
+      include?.customer && sale.customerId
+        ? projectUser(users.get(sale.customerId), include.customer.select)
+        : null,
+    items: include?.items
+      ? [...saleItems.values()]
+          .filter((item) => item.saleId === sale.id)
+          .map((item) => ({ ...item }))
+      : undefined,
+  });
 
   const db = {
     user: {
@@ -294,6 +500,9 @@ export function createFakeDatabase() {
           unit: ProductUnit;
           costPrice: number;
           sellingPrice: number;
+          currentStock:
+            | Prisma.Decimal
+            | { increment?: Prisma.Decimal; decrement?: Prisma.Decimal };
           reorderLevel: number;
           active: boolean;
         }>;
@@ -312,6 +521,17 @@ export function createFakeDatabase() {
           throw uniqueConstraintError();
         }
 
+        const currentStock =
+          options.data.currentStock instanceof Prisma.Decimal
+            ? options.data.currentStock
+            : options.data.currentStock?.increment
+              ? product.currentStock.plus(options.data.currentStock.increment)
+              : options.data.currentStock?.decrement
+                ? product.currentStock.minus(
+                    options.data.currentStock.decrement,
+                  )
+                : product.currentStock;
+
         const updatedProduct: ProductRecord = {
           ...product,
           ...options.data,
@@ -323,6 +543,7 @@ export function createFakeDatabase() {
             options.data.sellingPrice === undefined
               ? product.sellingPrice
               : new Prisma.Decimal(options.data.sellingPrice),
+          currentStock,
           reorderLevel:
             options.data.reorderLevel === undefined
               ? product.reorderLevel
@@ -332,8 +553,33 @@ export function createFakeDatabase() {
         products.set(product.id, updatedProduct);
         return { ...updatedProduct };
       },
-      async updateMany() {
-        return { count: 0 };
+      async updateMany(options: {
+        where: ProductWhere;
+        data: {
+          currentStock?: {
+            increment?: Prisma.Decimal;
+            decrement?: Prisma.Decimal;
+          };
+        };
+      }) {
+        const matchingProducts = [...products.values()].filter((product) =>
+          matchesProductWhere(product, options.where),
+        );
+
+        for (const product of matchingProducts) {
+          const currentStock = options.data.currentStock?.increment
+            ? product.currentStock.plus(options.data.currentStock.increment)
+            : options.data.currentStock?.decrement
+              ? product.currentStock.minus(options.data.currentStock.decrement)
+              : product.currentStock;
+          products.set(product.id, {
+            ...product,
+            currentStock,
+            updatedAt: new Date(),
+          });
+        }
+
+        return { count: matchingProducts.length };
       },
       async count(options?: { where?: ProductWhere }) {
         return [...products.values()].filter((product) =>
@@ -353,13 +599,234 @@ export function createFakeDatabase() {
         return { ...product };
       },
     },
-    sale: {
-      async findMany() {
-        return [];
+    stockMovement: {
+      async create(options: {
+        data: {
+          productId: string;
+          type: StockMovementType;
+          quantity: Prisma.Decimal;
+          previousStock: Prisma.Decimal;
+          newStock: Prisma.Decimal;
+          unitCost?: Prisma.Decimal;
+          reference?: string;
+          note?: string;
+          saleId?: string;
+          createdById?: string;
+          occurredAt?: Date;
+        };
+      }) {
+        const movement: StockMovementRecord = {
+          id: `movement_${stockMovementSequence}`,
+          productId: options.data.productId,
+          type: options.data.type,
+          quantity: options.data.quantity,
+          previousStock: options.data.previousStock,
+          newStock: options.data.newStock,
+          unitCost: options.data.unitCost ?? null,
+          reference: options.data.reference ?? null,
+          note: options.data.note ?? null,
+          saleId: options.data.saleId ?? null,
+          createdById: options.data.createdById ?? null,
+          occurredAt: options.data.occurredAt ?? new Date(),
+        };
+        stockMovementSequence += 1;
+        stockMovements.set(movement.id, movement);
+        return { ...movement };
+      },
+      async findMany(options?: {
+        where?: StockMovementWhere;
+        include?: {
+          product?: boolean;
+          createdBy?: { select?: Partial<Record<keyof UserRecord, boolean>> };
+        };
+        take?: number;
+      }) {
+        return [...stockMovements.values()]
+          .filter((movement) =>
+            matchesStockMovementWhere(movement, options?.where),
+          )
+          .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+          .slice(0, options?.take)
+          .map((movement) =>
+            includeStockMovementRelations(movement, options?.include),
+          );
+      },
+      async count(options?: { where?: StockMovementWhere }) {
+        return [...stockMovements.values()].filter((movement) =>
+          matchesStockMovementWhere(movement, options?.where),
+        ).length;
+      },
+      async deleteMany(options?: { where?: StockMovementWhere }) {
+        const matchingIds = [...stockMovements.values()]
+          .filter((movement) =>
+            matchesStockMovementWhere(movement, options?.where),
+          )
+          .map((movement) => movement.id);
+        for (const id of matchingIds) {
+          stockMovements.delete(id);
+        }
+        return { count: matchingIds.length };
       },
     },
+    sale: {
+      async findMany(options?: {
+        where?: SaleWhere;
+        include?: {
+          seller?: { select?: UserSelect };
+          customer?: { select?: UserSelect };
+          items?: boolean;
+        };
+        take?: number;
+      }) {
+        return [...sales.values()]
+          .filter((sale) => matchesSaleWhere(sale, options?.where))
+          .sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime())
+          .slice(0, options?.take)
+          .map((sale) => includeSaleRelations(sale, options?.include));
+      },
+      async findUnique(options: {
+        where: SaleWhere;
+        include?: {
+          seller?: { select?: UserSelect };
+          customer?: { select?: UserSelect };
+          items?: boolean;
+        };
+      }) {
+        const sale = [...sales.values()].find((candidate) =>
+          matchesSaleWhere(candidate, options.where),
+        );
+        return sale ? includeSaleRelations(sale, options.include) : null;
+      },
+      async create(options: {
+        data: {
+          reference: string;
+          sellerId: string;
+          customerId?: string;
+          status: SaleStatus;
+          paymentMethod: PaymentMethod;
+          paymentStatus: PaymentStatus;
+          paymentReference?: string;
+          subtotal: Prisma.Decimal;
+          discountAmount: Prisma.Decimal;
+          totalAmount: Prisma.Decimal;
+          totalCost: Prisma.Decimal;
+          grossProfit: Prisma.Decimal;
+          soldAt?: Date;
+          items: {
+            create: Array<{
+              productId: string;
+              productName: string;
+              productUnit: ProductUnit;
+              quantity: Prisma.Decimal;
+              unitPrice: Prisma.Decimal;
+              unitCost: Prisma.Decimal;
+              lineTotal: Prisma.Decimal;
+              lineCost: Prisma.Decimal;
+              grossProfit: Prisma.Decimal;
+            }>;
+          };
+        };
+        include?: {
+          seller?: { select?: UserSelect };
+          customer?: { select?: UserSelect };
+          items?: boolean;
+        };
+      }) {
+        if (
+          [...sales.values()].some(
+            (sale) => sale.reference === options.data.reference,
+          )
+        ) {
+          throw uniqueConstraintError();
+        }
+
+        const now = new Date();
+        const sale: SaleRecord = {
+          id: `sale_${saleSequence}`,
+          reference: options.data.reference,
+          sellerId: options.data.sellerId,
+          customerId: options.data.customerId ?? null,
+          status: options.data.status,
+          paymentMethod: options.data.paymentMethod,
+          paymentStatus: options.data.paymentStatus,
+          paymentReference: options.data.paymentReference ?? null,
+          subtotal: options.data.subtotal,
+          discountAmount: options.data.discountAmount,
+          totalAmount: options.data.totalAmount,
+          totalCost: options.data.totalCost,
+          grossProfit: options.data.grossProfit,
+          soldAt: options.data.soldAt ?? now,
+          createdAt: now,
+          updatedAt: now,
+        };
+        saleSequence += 1;
+        sales.set(sale.id, sale);
+
+        for (const itemInput of options.data.items.create) {
+          const item: SaleItemRecord = {
+            id: `sale_item_${saleItemSequence}`,
+            saleId: sale.id,
+            ...itemInput,
+          };
+          saleItemSequence += 1;
+          saleItems.set(item.id, item);
+        }
+
+        return includeSaleRelations(sale, options.include);
+      },
+      async count(options?: { where?: SaleWhere }) {
+        return [...sales.values()].filter((sale) =>
+          matchesSaleWhere(sale, options?.where),
+        ).length;
+      },
+      async deleteMany(options?: { where?: SaleWhere }) {
+        const matchingIds = [...sales.values()]
+          .filter((sale) => matchesSaleWhere(sale, options?.where))
+          .map((sale) => sale.id);
+        for (const id of matchingIds) {
+          sales.delete(id);
+          for (const item of saleItems.values()) {
+            if (item.saleId === id) {
+              saleItems.delete(item.id);
+            }
+          }
+        }
+        return { count: matchingIds.length };
+      },
+    },
+    async $queryRaw() {
+      const value = BigInt(saleReferenceSequence);
+      saleReferenceSequence += 1;
+      return [{ value }];
+    },
     async $transaction<T>(callback: (tx: DatabaseClient) => Promise<T>) {
-      return callback(db as unknown as DatabaseClient);
+      const userSnapshot = new Map(users);
+      const refreshTokenSnapshot = new Map(refreshTokens);
+      const productSnapshot = new Map(products);
+      const stockMovementSnapshot = new Map(stockMovements);
+      const saleSnapshot = new Map(sales);
+      const saleItemSnapshot = new Map(saleItems);
+      try {
+        return await callback(db as unknown as DatabaseClient);
+      } catch (error) {
+        users.clear();
+        refreshTokens.clear();
+        products.clear();
+        stockMovements.clear();
+        sales.clear();
+        saleItems.clear();
+        for (const [id, user] of userSnapshot) users.set(id, user);
+        for (const [id, token] of refreshTokenSnapshot) {
+          refreshTokens.set(id, token);
+        }
+        for (const [id, product] of productSnapshot) products.set(id, product);
+        for (const [id, movement] of stockMovementSnapshot) {
+          stockMovements.set(id, movement);
+        }
+        for (const [id, sale] of saleSnapshot) sales.set(id, sale);
+        for (const [id, item] of saleItemSnapshot) saleItems.set(id, item);
+        throw error;
+      }
     },
   };
 
@@ -367,5 +834,9 @@ export function createFakeDatabase() {
     db: db as unknown as DatabaseClient,
     users,
     refreshTokens,
+    products,
+    stockMovements,
+    sales,
+    saleItems,
   };
 }

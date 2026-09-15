@@ -6,7 +6,12 @@ export class SaleController {
   constructor(private readonly saleService: SaleService) {}
 
   list = async (req: Request, res: Response) => {
-    const result = await this.saleService.list(Number(req.query.limit ?? 25));
+    const result = await this.saleService.list(req.query);
+    res.json({ success: true, data: result });
+  };
+
+  getById = async (req: Request<{ id: string }>, res: Response) => {
+    const result = await this.saleService.getById(req.params.id);
     res.json({ success: true, data: result });
   };
 
