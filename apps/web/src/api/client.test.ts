@@ -390,6 +390,7 @@ describe("ApiClient", () => {
       discountAmount: 0,
       items: [{ productId: "product_1", quantity: 2 }],
     });
+    await client.voidSale("sale_1", { reason: "Wrong order" });
 
     expect(requests[0]?.[0]).toBe(
       "https://api.test/api/v1/sales?status=COMPLETED&paymentStatus=PAID&limit=10",
@@ -398,6 +399,13 @@ describe("ApiClient", () => {
     expect(requests[2]?.[0]).toBe("https://api.test/api/v1/sales");
     expect(requests[2]?.[1]).toEqual(
       expect.objectContaining({ method: "POST" }),
+    );
+    expect(requests[3]?.[0]).toBe("https://api.test/api/v1/sales/sale_1/void");
+    expect(requests[3]?.[1]).toEqual(
+      expect.objectContaining({
+        body: JSON.stringify({ reason: "Wrong order" }),
+        method: "POST",
+      }),
     );
   });
 });

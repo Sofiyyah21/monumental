@@ -5,11 +5,14 @@ import {
   ReceiptView,
   SaleDetailView,
   SalesHistoryView,
+  VoidSaleDialog,
 } from "./SalesHistoryPage";
 import {
   defaultSalesHistoryFilters,
   saleDisplayError,
+  saleVoidDisplayError,
   toSaleFilters,
+  validateVoidReason,
 } from "./sales-history-utils";
 
 const sale: Sale = {
@@ -35,6 +38,10 @@ const sale: Sale = {
     email: "staff@monumental.test",
     role: "STAFF",
   },
+  voidedAt: null,
+  voidedById: null,
+  voidReason: null,
+  voidedBy: null,
   items: [
     {
       id: "item_1",
@@ -65,6 +72,22 @@ const sale: Sale = {
   ],
 };
 
+const voidedSale: Sale = {
+  ...sale,
+  id: "sale_2",
+  reference: "MD-20260915-00002",
+  status: "VOIDED",
+  voidedAt: "2026-09-15T12:00:00.000Z",
+  voidedById: "user_2",
+  voidReason: "Customer cancelled after checkout",
+  voidedBy: {
+    id: "user_2",
+    name: "Manager User",
+    email: "manager@monumental.test",
+    role: "MANAGER",
+  },
+};
+
 function renderHistory(
   overrides: Partial<{
     error: string | null;
@@ -90,12 +113,21 @@ describe("SalesHistoryView", () => {
 
     expect(html).toContain("Transactions and receipts");
     expect(html).toContain("MD-20260915-00001");
+    expect(html).toContain("Completed");
     expect(html).toContain("15 Sept 2026");
     expect(html).toContain("₦5,500.00");
     expect(html).toContain("Paid");
     expect(html).toContain("2");
     expect(html).toContain("Staff User");
     expect(html).toContain("View MD-20260915-00001");
+  });
+
+  it("renders voided sales in history without removing the audit trail", () => {
+    const html = renderHistory({ sales: [voidedSale] });
+
+    expect(html).toContain("MD-20260915-00002");
+    expect(html).toContain("Voided");
+    expect(html).toContain("View MD-20260915-00002");
   });
 
   it("renders loading, empty, and API error states", () => {
@@ -112,16 +144,19 @@ describe("SalesHistoryView", () => {
         from: "2026-09-01",
         to: "2026-09-15",
         paymentStatus: "PENDING",
+        status: "VOIDED",
         limit: 50,
       }),
     ).toEqual({
       from: new Date("2026-09-01T00:00:00").toISOString(),
       to: new Date("2026-09-15T23:59:59.999").toISOString(),
       paymentStatus: "PENDING",
+      status: "VOIDED",
       limit: 50,
     });
 
     const html = renderHistory();
+    expect(html).toContain("Sale status");
     expect(html).toContain("Payment status");
     expect(html).toContain("25 sales");
     expect(html).not.toContain("Reference search");
@@ -154,6 +189,96 @@ describe("Sale detail and receipt", () => {
     expect(html).toContain("Discount");
     expect(html).toContain("Total");
     expect(html).toContain("Gross profit");
+  });
+
+  it("shows the void action only when the caller has void permission and the sale is completed", () => {
+    const adminHtml = renderToStaticMarkup(
+      <SaleDetailView
+        canViewFinancials
+        canVoidSale
+        error={null}
+        loading={false}
+        onBackToHistory={vi.fn()}
+        onNewSale={vi.fn()}
+        onPrint={vi.fn()}
+        sale={sale}
+      />,
+    );
+    const staffHtml = renderToStaticMarkup(
+      <SaleDetailView
+        canViewFinancials={false}
+        canVoidSale={false}
+        error={null}
+        loading={false}
+        onBackToHistory={vi.fn()}
+        onNewSale={vi.fn()}
+        onPrint={vi.fn()}
+        sale={sale}
+      />,
+    );
+    const voidedHtml = renderToStaticMarkup(
+      <SaleDetailView
+        canViewFinancials
+        canVoidSale={false}
+        error={null}
+        loading={false}
+        onBackToHistory={vi.fn()}
+        onNewSale={vi.fn()}
+        onPrint={vi.fn()}
+        sale={voidedSale}
+      />,
+    );
+
+    expect(adminHtml).toContain("Void sale");
+    expect(staffHtml).not.toContain("Void sale");
+    expect(voidedHtml).not.toContain("Void sale");
+    expect(voidedHtml).toContain("Sale voided");
+  });
+
+  it("renders void confirmation with validation and submission state", () => {
+    expect(validateVoidReason("")).toContain("reason");
+    expect(validateVoidReason("   ")).toContain("reason");
+    expect(validateVoidReason("x".repeat(501))).toContain("500");
+    expect(validateVoidReason("Wrong order")).toBeNull();
+
+    const html = renderToStaticMarkup(
+      <VoidSaleDialog
+        formError="Enter a reason for voiding this sale."
+        loading
+        onCancel={vi.fn()}
+        onReasonChange={vi.fn()}
+        onSubmit={vi.fn()}
+        reason="   "
+        sale={sale}
+      />,
+    );
+
+    expect(html).toContain("This will void the sale");
+    expect(html).toContain("payment-provider refund");
+    expect(html).toContain("Enter a reason");
+    expect(html).toContain("Voiding sale");
+  });
+
+  it("renders voided sale detail with original transaction values and void metadata", () => {
+    const html = renderToStaticMarkup(
+      <SaleDetailView
+        canViewFinancials
+        canVoidSale={false}
+        error={null}
+        loading={false}
+        onBackToHistory={vi.fn()}
+        onNewSale={vi.fn()}
+        onPrint={vi.fn()}
+        sale={voidedSale}
+      />,
+    );
+
+    expect(html).toContain("Voided");
+    expect(html).toContain("Customer cancelled after checkout");
+    expect(html).toContain("Manager User");
+    expect(html).toContain("Historical Sugar");
+    expect(html).toContain("₦1,000.00");
+    expect(html).toContain("₦5,500.00");
   });
 
   it("renders loading, not-found, and forbidden-style errors", () => {
@@ -201,5 +326,27 @@ describe("Sale detail and receipt", () => {
     expect(staffHtml).not.toContain("Gross profit");
     expect(managerHtml).toContain("Total cost");
     expect(managerHtml).toContain("Gross profit");
+  });
+
+  it("marks voided receipts while preserving historical item data and print content", () => {
+    const html = renderToStaticMarkup(
+      <ReceiptView canViewFinancials sale={voidedSale} />,
+    );
+
+    expect(html).toContain("VOIDED");
+    expect(html).toContain("Customer cancelled after checkout");
+    expect(html).toContain("Manager User");
+    expect(html).toContain("Historical Sugar");
+    expect(html).toContain("₦1,000.00");
+    expect(html).not.toContain("REFUNDED");
+  });
+
+  it("maps void errors to useful messages", () => {
+    expect(saleVoidDisplayError({ status: 409 })).toContain("already");
+    expect(saleVoidDisplayError({ status: 403 })).toContain("permission");
+    expect(saleVoidDisplayError({ status: 401 })).toContain("session");
+    expect(saleVoidDisplayError({ status: 404 })).toContain("not found");
+    expect(saleVoidDisplayError({ status: 400 })).toContain("valid reason");
+    expect(saleVoidDisplayError({ status: 500 })).toContain("could not");
   });
 });

@@ -24,6 +24,7 @@ import type {
   StockMovementFilters,
   StockReceiptInput,
   StockReturnInput,
+  VoidSaleInput,
 } from "./types";
 import type { CurrentUser } from "./types";
 
@@ -259,6 +260,13 @@ export class ApiClient {
 
   async createSale(input: CreateSaleInput) {
     return this.request<Sale>("/sales", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async voidSale(id: string, input: VoidSaleInput) {
+    return this.request<Sale>(`/sales/${id}/void`, {
       method: "POST",
       body: JSON.stringify(input),
     });

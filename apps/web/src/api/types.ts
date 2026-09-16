@@ -1,7 +1,7 @@
 export type UserRole = "ADMIN" | "MANAGER" | "STAFF" | "CUSTOMER";
 export type ProductCategory = "DRINKS" | "NOODLES" | "VEGETABLE_OIL" | "SUGAR";
 export type ProductUnit = "PACK" | "LITER" | "CUP";
-export type SaleStatus = "COMPLETED" | "VOIDED" | "REFUNDED";
+export type SaleStatus = "COMPLETED" | "VOIDED";
 export type PaymentMethod = "CASH" | "TRANSFER" | "CARD" | "OTHER";
 export type PaymentStatus = "PAID" | "PENDING";
 export type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
@@ -16,6 +16,7 @@ export type Permission =
   | "manage:inventory"
   | "read:sales"
   | "create:sales"
+  | "void:sales"
   | "read:reports"
   | "read:admin-dashboard";
 
@@ -115,12 +116,16 @@ export type Sale = {
   totalAmount: string;
   totalCost?: string;
   grossProfit: string;
+  voidedAt?: string | null;
+  voidedById?: string | null;
+  voidReason?: string | null;
   soldAt: string;
   createdAt?: string;
   updatedAt?: string;
   items?: SaleItem[];
   seller?: SaleUserSnapshot;
   customer?: SaleUserSnapshot | null;
+  voidedBy?: SaleUserSnapshot | null;
 };
 
 export type SaleFilters = {
@@ -144,6 +149,10 @@ export type CreateSaleInput = {
     productId: string;
     quantity: number;
   }>;
+};
+
+export type VoidSaleInput = {
+  reason: string;
 };
 
 export type Product = {

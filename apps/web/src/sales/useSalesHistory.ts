@@ -65,46 +65,45 @@ export function useSaleDetail(
   const [error, setError] = useState<string | null>(null);
   const missingSaleId = !saleId;
 
+  const loadSale = useCallback(async () => {
+    if (!saleId) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      setSale(await client.getSale(saleId));
+    } catch (error) {
+      setError(
+        error instanceof ApiError
+          ? saleDisplayError(error)
+          : "Sale detail could not load.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [client, saleId]);
+
   useEffect(() => {
     if (!saleId) return;
 
     let active = true;
     const timeoutId = window.setTimeout(() => {
-      setLoading(true);
-      setError(null);
-
-      void client
-        .getSale(saleId)
-        .then((result) => {
-          if (active) {
-            setSale(result);
-          }
-        })
-        .catch((error: unknown) => {
-          if (active) {
-            setError(
-              error instanceof ApiError
-                ? saleDisplayError(error)
-                : "Sale detail could not load.",
-            );
-          }
-        })
-        .finally(() => {
-          if (active) {
-            setLoading(false);
-          }
-        });
+      if (active) {
+        void loadSale();
+      }
     }, 0);
 
     return () => {
       active = false;
       window.clearTimeout(timeoutId);
     };
-  }, [client, saleId]);
+  }, [loadSale, saleId]);
 
   return {
     error: missingSaleId ? "Sale not found." : error,
     loading: missingSaleId ? false : loading,
+    reload: loadSale,
     sale: missingSaleId ? null : sale,
+    setSale,
   };
 }

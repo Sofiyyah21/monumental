@@ -577,6 +577,11 @@
   color: var(--color-info);
 }
 
+.status-badge--VOIDED {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
 .sale-money {
   text-align: right;
 }
@@ -749,6 +754,36 @@
   max-width: 31rem;
   padding: var(--space-6);
   width: 100%;
+}
+
+.confirm-dialog label {
+  color: var(--color-muted);
+  display: grid;
+  font-size: 0.88rem;
+  font-weight: 800;
+  gap: var(--space-2);
+}
+
+.confirm-dialog textarea {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  font: inherit;
+  min-height: 7rem;
+  padding: 0.7rem;
+  resize: vertical;
+}
+
+.field-help {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.field-error {
+  color: var(--color-danger);
+  font-size: 0.88rem;
+  font-weight: 800;
 }
 
 .inventory-grid {
@@ -1158,7 +1193,7 @@
   align-items: end;
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .sales-history-filters label {
@@ -1208,12 +1243,40 @@
   display: block;
 }
 
+.sales-history-row--voided {
+  background: var(--color-danger-soft);
+}
+
 .sale-detail-actions {
   align-self: start;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: end;
+}
+
+.sale-title-line,
+.receipt-title-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.voided-sale-notice {
+  border-color: var(--color-danger);
+}
+
+.voided-sale-notice h3 {
+  color: var(--color-danger);
+}
+
+.voided-sale-notice p {
+  color: var(--color-muted);
+}
+
+.void-sale-dialog {
+  border-color: var(--color-danger);
 }
 
 .receipt-print-area {
@@ -1243,6 +1306,30 @@
 
 .receipt-header p {
   color: var(--color-muted);
+}
+
+.receipt-void-banner {
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: 6px;
+  color: var(--color-danger);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+}
+
+.receipt-void-banner strong {
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+}
+
+.receipt-void-banner span {
+  color: var(--color-text);
+}
+
+.receipt-void-meta {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-2);
 }
 
 .receipt-meta,
