@@ -40,6 +40,19 @@ export type ListSalesInput = {
   limit?: number;
 };
 
+export type VoidSaleInput = {
+  saleId: string;
+  voidedById: string;
+  reason: string;
+};
+
+const saleInclude = {
+  seller: { select: { id: true, name: true, email: true, role: true } },
+  customer: { select: { id: true, name: true, email: true, role: true } },
+  voidedBy: { select: { id: true, name: true, email: true, role: true } },
+  items: true,
+} satisfies Prisma.SaleInclude;
+
 export class SaleService {
   constructor(private readonly db: DatabaseClient) {}
 
@@ -58,11 +71,7 @@ export class SaleService {
               }
             : undefined,
       },
-      include: {
-        seller: { select: { id: true, name: true, email: true, role: true } },
-        customer: { select: { id: true, name: true, email: true, role: true } },
-        items: true,
-      },
+      include: saleInclude,
       orderBy: { soldAt: "desc" },
       take: input.limit ?? 25,
     });
@@ -71,11 +80,7 @@ export class SaleService {
   async getById(id: string) {
     const sale = await this.db.sale.findUnique({
       where: { id },
-      include: {
-        seller: { select: { id: true, name: true, email: true, role: true } },
-        customer: { select: { id: true, name: true, email: true, role: true } },
-        items: true,
-      },
+      include: saleInclude,
     });
 
     if (!sale) {
@@ -212,15 +217,7 @@ export class SaleService {
             })),
           },
         },
-        include: {
-          seller: {
-            select: { id: true, name: true, email: true, role: true },
-          },
-          customer: {
-            select: { id: true, name: true, email: true, role: true },
-          },
-          items: true,
-        },
+        include: saleInclude,
       });
 
       for (const item of saleItems.sort((a, b) =>
@@ -255,6 +252,82 @@ export class SaleService {
       }
 
       return sale;
+    }, inventoryTransactionOptions);
+  }
+
+  async voidSale(input: VoidSaleInput) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Sale" WHERE "id" = ${input.saleId} FOR UPDATE
+      `;
+
+      const sale = await tx.sale.findUnique({
+        where: { id: input.saleId },
+        include: saleInclude,
+      });
+
+      if (!sale) {
+        throw new AppError("Sale not found", 404, "SALE_NOT_FOUND");
+      }
+
+      if (sale.status === SaleStatus.VOIDED) {
+        throw new AppError(
+          "Sale has already been voided",
+          409,
+          "SALE_ALREADY_VOIDED",
+        );
+      }
+
+      if (sale.status !== SaleStatus.COMPLETED) {
+        throw new AppError(
+          "Sale cannot be voided from its current state",
+          409,
+          "SALE_NOT_VOIDABLE",
+        );
+      }
+
+      const productIds = [...new Set(sale.items.map((item) => item.productId))];
+      const sortedProductIds = [...productIds].sort();
+      await tx.$queryRaw`
+        SELECT "id" FROM "Product"
+        WHERE "id" IN (${Prisma.join(sortedProductIds)})
+        ORDER BY "id"
+        FOR UPDATE
+      `;
+
+      const voidedAt = new Date();
+      const reason = input.reason.trim();
+
+      for (const item of [...sale.items].sort((a, b) =>
+        a.productId.localeCompare(b.productId),
+      )) {
+        await applyTrackedStockDelta(tx, {
+          productId: item.productId,
+          quantityChange: item.quantity,
+          movementQuantity: item.quantity,
+          unit: item.productUnit,
+          type: StockMovementType.RETURN,
+          unitCost: item.unitCost,
+          reference: sale.reference,
+          saleId: sale.id,
+          userId: input.voidedById,
+          note: `Void sale: ${reason}`,
+          occurredAt: voidedAt,
+          requireActive: false,
+          requireUnitMatch: false,
+        });
+      }
+
+      return tx.sale.update({
+        where: { id: sale.id },
+        data: {
+          status: SaleStatus.VOIDED,
+          voidedAt,
+          voidedById: input.voidedById,
+          voidReason: reason,
+        },
+        include: saleInclude,
+      });
     }, inventoryTransactionOptions);
   }
 

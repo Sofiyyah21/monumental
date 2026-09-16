@@ -368,6 +368,54 @@ describe("reports API", () => {
     expect(Number(response.body.data.grossProfit)).toBe(0);
   });
 
+  it("excludes voided sales from summaries, product sales, and best sellers", async () => {
+    const { app, db, saleService } = createReportTestContext();
+    const admin = await createAuth(db, UserRole.ADMIN);
+    const manager = await createAuth(db, UserRole.MANAGER);
+    const product = await createProduct(db, {
+      name: "Voided Report Drink",
+      stock: 20,
+      costPrice: 10,
+      sellingPrice: 20,
+    });
+
+    const sale = await saleService.create({
+      sellerId: admin.user.id,
+      paymentMethod: PaymentMethod.CASH,
+      paymentStatus: PaymentStatus.PAID,
+      discountAmount: 0,
+      soldAt: new Date("2026-09-15T10:00:00.000Z"),
+      items: [{ productId: product.id, quantity: 5 }],
+    });
+
+    await saleService.voidSale({
+      saleId: sale.id,
+      voidedById: manager.user.id,
+      reason: "Reporting exclusion test",
+    });
+
+    const summary = await request(app)
+      .get("/api/v1/reports/today")
+      .set("Authorization", admin.auth)
+      .expect(200);
+    const products = await request(app)
+      .get("/api/v1/reports/products?from=2026-09-15&to=2026-09-15")
+      .set("Authorization", admin.auth)
+      .expect(200);
+    const bestSellers = await request(app)
+      .get("/api/v1/reports/best-sellers?from=2026-09-15&to=2026-09-15")
+      .set("Authorization", admin.auth)
+      .expect(200);
+
+    expect(summary.body.data.salesCount).toBe(0);
+    expect(Number(summary.body.data.unitsSold)).toBe(0);
+    expect(Number(summary.body.data.revenue)).toBe(0);
+    expect(Number(summary.body.data.cogs)).toBe(0);
+    expect(Number(summary.body.data.grossProfit)).toBe(0);
+    expect(products.body.data.products).toEqual([]);
+    expect(bestSellers.body.data.products).toEqual([]);
+  });
+
   it("enforces reporting RBAC", async () => {
     vi.useRealTimers();
     const { app, db } = createReportTestContext();

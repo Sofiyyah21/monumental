@@ -6,6 +6,7 @@ import {
   Prisma,
   ProductCategory,
   ProductUnit,
+  SaleStatus,
   StockMovementType,
   UserRole,
 } from "@prisma/client";
@@ -56,7 +57,7 @@ async function cleanupIntegrationSales() {
   });
 }
 
-async function createUser(role = UserRole.STAFF) {
+async function createUser(role: UserRole = UserRole.STAFF) {
   return prisma.user.create({
     data: {
       email: `sale-${crypto.randomUUID()}@${testEmailDomain}`,
@@ -256,5 +257,116 @@ describeDatabase("database-backed sales integration", () => {
     expect(firstSale.reference).not.toBe(secondSale.reference);
     expect(firstSale.reference).toMatch(/^MD-\d{8}-\d{5}$/);
     expect(secondSale.reference).toMatch(/^MD-\d{8}-\d{5}$/);
+  });
+
+  it("voids a completed sale transactionally and restores inventory with audit movements", async () => {
+    const seller = await createUser(UserRole.STAFF);
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({
+      name: "Void Integration Drink",
+      stock: 10,
+      costPrice: 80,
+      sellingPrice: 125,
+    });
+
+    const sale = await saleService.create({
+      sellerId: seller.id,
+      paymentMethod: PaymentMethod.CASH,
+      paymentStatus: PaymentStatus.PAID,
+      discountAmount: 0,
+      items: [{ productId: product.id, quantity: 4 }],
+    });
+
+    await prisma.product.update({
+      where: { id: product.id },
+      data: {
+        name: "Renamed Void Integration Drink",
+        category: ProductCategory.SUGAR,
+        unit: ProductUnit.CUP,
+        active: false,
+      },
+    });
+
+    const voidedSale = await saleService.voidSale({
+      saleId: sale.id,
+      voidedById: manager.id,
+      reason: "Integration void",
+    });
+
+    expect(voidedSale.status).toBe(SaleStatus.VOIDED);
+    expect(voidedSale.voidedById).toBe(manager.id);
+    expect(voidedSale.voidReason).toBe("Integration void");
+    expect(voidedSale.voidedAt).toBeInstanceOf(Date);
+    expect(voidedSale.items[0]?.productName).toBe("Void Integration Drink");
+    expect(voidedSale.items[0]?.unitPrice.toNumber()).toBe(125);
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(storedProduct.currentStock.toNumber()).toBe(10);
+    expect(storedProduct.unit).toBe(ProductUnit.CUP);
+    expect(storedProduct.active).toBe(false);
+
+    const movements = await prisma.stockMovement.findMany({
+      where: { saleId: sale.id },
+      orderBy: { occurredAt: "asc" },
+    });
+    expect(movements.map((movement) => movement.type)).toEqual([
+      StockMovementType.SOLD,
+      StockMovementType.RETURN,
+    ]);
+    expect(movements[1]?.reference).toBe(sale.reference);
+    expect(movements[1]?.createdById).toBe(manager.id);
+    expect(movements[1]?.note).toBe("Void sale: Integration void");
+    expect(movements[1]?.previousStock.toNumber()).toBe(6);
+    expect(movements[1]?.newStock.toNumber()).toBe(10);
+  });
+
+  it("prevents concurrent void attempts from restoring inventory twice", async () => {
+    const seller = await createUser(UserRole.STAFF);
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 10 });
+
+    const sale = await saleService.create({
+      sellerId: seller.id,
+      paymentMethod: PaymentMethod.CASH,
+      paymentStatus: PaymentStatus.PAID,
+      discountAmount: 0,
+      items: [{ productId: product.id, quantity: 7 }],
+    });
+
+    const results = await Promise.allSettled([
+      saleService.voidSale({
+        saleId: sale.id,
+        voidedById: manager.id,
+        reason: "First void attempt",
+      }),
+      saleService.voidSale({
+        saleId: sale.id,
+        voidedById: manager.id,
+        reason: "Second void attempt",
+      }),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    const returnMovements = await prisma.stockMovement.findMany({
+      where: { saleId: sale.id, type: StockMovementType.RETURN },
+    });
+    const storedSale = await prisma.sale.findUniqueOrThrow({
+      where: { id: sale.id },
+    });
+
+    expect(storedProduct.currentStock.toNumber()).toBe(10);
+    expect(returnMovements).toHaveLength(1);
+    expect(storedSale.status).toBe(SaleStatus.VOIDED);
   });
 });

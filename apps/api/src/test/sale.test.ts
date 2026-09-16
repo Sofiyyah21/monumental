@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   PaymentMethod,
   PaymentStatus,
@@ -415,5 +415,221 @@ describe("sales API", () => {
     expect(sales.size).toBe(0);
     expect(saleItems.size).toBe(0);
     expect(stockMovements.size).toBe(0);
+  });
+
+  it("voids a completed sale, restores stock, and preserves historical sale data", async () => {
+    const { app, db, stockMovements } = createSaleTestContext();
+    const product = await createProduct(db, {
+      name: "Voidable Drink",
+      stock: 10,
+      costPrice: 70,
+      sellingPrice: 120,
+    });
+    const staff = await createAuth(db, UserRole.STAFF);
+    const manager = await createAuth(db, UserRole.MANAGER);
+
+    const saleResponse = await request(app)
+      .post("/api/v1/sales")
+      .set("Authorization", staff.auth)
+      .send(createSalePayload([{ productId: product.id, quantity: 4 }]))
+      .expect(201);
+
+    await db.product.update({
+      where: { id: product.id },
+      data: {
+        name: "Renamed Voidable Drink",
+        category: ProductCategory.SUGAR,
+        unit: ProductUnit.CUP,
+        active: false,
+      },
+    });
+
+    const voidResponse = await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Customer changed order" })
+      .expect(200);
+
+    expect(voidResponse.body.data).toMatchObject({
+      id: saleResponse.body.data.id,
+      status: SaleStatus.VOIDED,
+      voidedById: manager.user.id,
+      voidReason: "Customer changed order",
+    });
+    expect(voidResponse.body.data.voidedAt).toEqual(expect.any(String));
+    expect(voidResponse.body.data.items[0]).toMatchObject({
+      productName: "Voidable Drink",
+      productUnit: ProductUnit.PACK,
+    });
+    expect(Number(voidResponse.body.data.items[0].unitPrice)).toBe(120);
+    expect(Number(voidResponse.body.data.items[0].unitCost)).toBe(70);
+
+    const storedProduct = await db.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(Number(storedProduct.currentStock)).toBe(10);
+    expect(storedProduct.unit).toBe(ProductUnit.CUP);
+    expect(storedProduct.active).toBe(false);
+
+    const movements = [...stockMovements.values()].filter(
+      (movement) => movement.saleId === saleResponse.body.data.id,
+    );
+    expect(movements).toHaveLength(2);
+    const soldMovement = movements.find(
+      (movement) => movement.type === StockMovementType.SOLD,
+    );
+    const returnMovement = movements.find(
+      (movement) => movement.type === StockMovementType.RETURN,
+    );
+    expect(soldMovement).toBeDefined();
+    expect(returnMovement).toMatchObject({
+      productId: product.id,
+      type: StockMovementType.RETURN,
+      reference: saleResponse.body.data.reference,
+      saleId: saleResponse.body.data.id,
+      createdById: manager.user.id,
+      note: "Void sale: Customer changed order",
+    });
+    expect(Number(returnMovement?.quantity)).toBe(4);
+    expect(Number(returnMovement?.previousStock)).toBe(6);
+    expect(Number(returnMovement?.newStock)).toBe(10);
+  });
+
+  it("enforces void-sale authorization", async () => {
+    const { app, db } = createSaleTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const staff = await createAuth(db, UserRole.STAFF);
+    const manager = await createAuth(db, UserRole.MANAGER);
+    const admin = await createAuth(db, UserRole.ADMIN);
+    const customer = await createAuth(db, UserRole.CUSTOMER);
+
+    const staffSale = await request(app)
+      .post("/api/v1/sales")
+      .set("Authorization", staff.auth)
+      .send(createSalePayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    const managerSale = await request(app)
+      .post("/api/v1/sales")
+      .set("Authorization", staff.auth)
+      .send(createSalePayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+
+    await request(app)
+      .post(`/api/v1/sales/${staffSale.body.data.id}/void`)
+      .send({ reason: "Missing auth" })
+      .expect(401);
+    await request(app)
+      .post(`/api/v1/sales/${staffSale.body.data.id}/void`)
+      .set("Authorization", customer.auth)
+      .send({ reason: "Customer cannot void" })
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/sales/${staffSale.body.data.id}/void`)
+      .set("Authorization", staff.auth)
+      .send({ reason: "Staff cannot void" })
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/sales/${staffSale.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Manager correction" })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/sales/${managerSale.body.data.id}/void`)
+      .set("Authorization", admin.auth)
+      .send({ reason: "Admin correction" })
+      .expect(200);
+  });
+
+  it("validates void-sale requests and rejects invalid lifecycle states", async () => {
+    const { app, db } = createSaleTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const manager = await createAuth(db, UserRole.MANAGER);
+    const staff = await createAuth(db, UserRole.STAFF);
+
+    const saleResponse = await request(app)
+      .post("/api/v1/sales")
+      .set("Authorization", staff.auth)
+      .send(createSalePayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+
+    await request(app)
+      .post("/api/v1/sales/%20/void")
+      .set("Authorization", manager.auth)
+      .send({ reason: "Invalid id" })
+      .expect(400);
+    await request(app)
+      .post("/api/v1/sales/missing/void")
+      .set("Authorization", manager.auth)
+      .send({ reason: "Not found" })
+      .expect(404);
+    await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({})
+      .expect(400);
+    await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "   " })
+      .expect(400);
+    await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "x".repeat(501) })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Valid void" })
+      .expect(200);
+
+    await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Second void" })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.error.code).toBe("SALE_ALREADY_VOIDED");
+      });
+  });
+
+  it("rolls back void status and inventory when reversal movement creation fails", async () => {
+    const { app, db } = createSaleTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const staff = await createAuth(db, UserRole.STAFF);
+    const manager = await createAuth(db, UserRole.MANAGER);
+
+    const saleResponse = await request(app)
+      .post("/api/v1/sales")
+      .set("Authorization", staff.auth)
+      .send(createSalePayload([{ productId: product.id, quantity: 3 }]))
+      .expect(201);
+
+    const createMovement = vi.spyOn(db.stockMovement, "create");
+    createMovement.mockRejectedValueOnce(new Error("movement failure"));
+
+    await request(app)
+      .post(`/api/v1/sales/${saleResponse.body.data.id}/void`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Rollback test" })
+      .expect(500);
+
+    createMovement.mockRestore();
+
+    const storedSale = await db.sale.findUnique({
+      where: { id: saleResponse.body.data.id },
+    });
+    const storedProduct = await db.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    const movements = await db.stockMovement.findMany({
+      where: { saleId: saleResponse.body.data.id },
+    });
+
+    expect(storedSale?.status).toBe(SaleStatus.COMPLETED);
+    expect(Number(storedProduct.currentStock)).toBe(7);
+    expect(movements).toHaveLength(1);
+    expect(movements[0]?.type).toBe(StockMovementType.SOLD);
   });
 });

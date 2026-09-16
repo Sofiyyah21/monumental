@@ -74,6 +74,9 @@ type SaleRecord = {
   totalAmount: Prisma.Decimal;
   totalCost: Prisma.Decimal;
   grossProfit: Prisma.Decimal;
+  voidedAt: Date | null;
+  voidedById: string | null;
+  voidReason: string | null;
   soldAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -384,6 +387,7 @@ export function createFakeDatabase() {
     include?: {
       seller?: { select?: UserSelect };
       customer?: { select?: UserSelect };
+      voidedBy?: { select?: UserSelect };
       items?: boolean;
     },
   ) => ({
@@ -394,6 +398,10 @@ export function createFakeDatabase() {
     customer:
       include?.customer && sale.customerId
         ? projectUser(users.get(sale.customerId), include.customer.select)
+        : null,
+    voidedBy:
+      include?.voidedBy && sale.voidedById
+        ? projectUser(users.get(sale.voidedById), include.voidedBy.select)
         : null,
     items: include?.items
       ? [...saleItems.values()]
@@ -715,6 +723,7 @@ export function createFakeDatabase() {
         include?: {
           seller?: { select?: UserSelect };
           customer?: { select?: UserSelect };
+          voidedBy?: { select?: UserSelect };
           items?: boolean;
         };
         take?: number;
@@ -730,6 +739,7 @@ export function createFakeDatabase() {
         include?: {
           seller?: { select?: UserSelect };
           customer?: { select?: UserSelect };
+          voidedBy?: { select?: UserSelect };
           items?: boolean;
         };
       }) {
@@ -796,6 +806,9 @@ export function createFakeDatabase() {
           totalAmount: options.data.totalAmount,
           totalCost: options.data.totalCost,
           grossProfit: options.data.grossProfit,
+          voidedAt: null,
+          voidedById: null,
+          voidReason: null,
           soldAt: options.data.soldAt ?? now,
           createdAt: now,
           updatedAt: now,
@@ -814,6 +827,39 @@ export function createFakeDatabase() {
         }
 
         return includeSaleRelations(sale, options.include);
+      },
+      async update(options: {
+        where: SaleWhere;
+        data: Partial<{
+          status: SaleStatus;
+          voidedAt: Date;
+          voidedById: string;
+          voidReason: string;
+        }>;
+        include?: {
+          seller?: { select?: UserSelect };
+          customer?: { select?: UserSelect };
+          voidedBy?: { select?: UserSelect };
+          items?: boolean;
+        };
+      }) {
+        const sale = [...sales.values()].find((candidate) =>
+          matchesSaleWhere(candidate, options.where),
+        );
+        if (!sale) {
+          throw recordNotFoundError();
+        }
+
+        const updatedSale: SaleRecord = {
+          ...sale,
+          status: options.data.status ?? sale.status,
+          voidedAt: options.data.voidedAt ?? sale.voidedAt,
+          voidedById: options.data.voidedById ?? sale.voidedById,
+          voidReason: options.data.voidReason ?? sale.voidReason,
+          updatedAt: new Date(),
+        };
+        sales.set(sale.id, updatedSale);
+        return includeSaleRelations(updatedSale, options.include);
       },
       async count(options?: { where?: SaleWhere }) {
         return [...sales.values()].filter((sale) =>

@@ -232,6 +232,9 @@ export const openApiDocument = {
           totalAmount: { type: "string", example: "300.00" },
           totalCost: { type: "string", example: "200.00" },
           grossProfit: { type: "string", example: "100.00" },
+          voidedAt: { type: "string", format: "date-time", nullable: true },
+          voidedById: { type: "string", nullable: true },
+          voidReason: { type: "string", nullable: true },
           soldAt: { type: "string", format: "date-time" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
@@ -265,6 +268,18 @@ export const openApiDocument = {
                 quantity: { type: "number", exclusiveMinimum: 0 },
               },
             },
+          },
+        },
+      },
+      VoidSaleInput: {
+        type: "object",
+        required: ["reason"],
+        properties: {
+          reason: {
+            type: "string",
+            minLength: 1,
+            maxLength: 500,
+            description: "Required business reason for voiding the sale.",
           },
         },
       },
@@ -1010,6 +1025,54 @@ export const openApiDocument = {
           "401": { description: "Authentication required" },
           "403": { description: "Insufficient permission" },
           "404": { description: "Sale not found" },
+        },
+      },
+    },
+    "/sales/{id}/void": {
+      post: {
+        tags: ["Sales"],
+        security: [{ bearerAuth: [] }],
+        summary: "Void a completed sale",
+        description:
+          "Requires void:sales permission. Voids an eligible completed sale transactionally, restores inventory through RETURN stock movements, and records void audit metadata. This does not process external payment-provider refunds.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/VoidSaleInput" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Sale voided",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Sale" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Sale not found" },
+          "409": {
+            description: "Sale is already voided or cannot be voided",
+          },
         },
       },
     },

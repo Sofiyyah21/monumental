@@ -54,5 +54,9 @@ export const listSalesQuerySchema = paginationQuerySchema
   });
 
 export const saleIdParamSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().trim().min(1),
+});
+
+export const voidSaleSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
 });

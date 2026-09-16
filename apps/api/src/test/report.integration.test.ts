@@ -6,7 +6,6 @@ import {
   Prisma,
   ProductCategory,
   ProductUnit,
-  SaleStatus,
   UserRole,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
@@ -189,6 +188,7 @@ describeDatabase("database-backed reporting integration", () => {
 
   it("excludes voided sales from financial reports", async () => {
     const seller = await createUser();
+    const manager = await createUser(UserRole.MANAGER);
     const product = await createProduct({
       name: "Voided Integration Drink",
       stock: 10,
@@ -196,35 +196,18 @@ describeDatabase("database-backed reporting integration", () => {
       sellingPrice: 30,
     });
 
-    await prisma.sale.create({
-      data: {
-        reference: `VOIDED-${crypto.randomUUID()}`,
-        sellerId: seller.id,
-        status: SaleStatus.VOIDED,
-        paymentMethod: PaymentMethod.CASH,
-        paymentStatus: PaymentStatus.PAID,
-        subtotal: new Prisma.Decimal(90),
-        discountAmount: new Prisma.Decimal(0),
-        totalAmount: new Prisma.Decimal(90),
-        totalCost: new Prisma.Decimal(60),
-        grossProfit: new Prisma.Decimal(30),
-        soldAt: new Date("2026-09-15T08:00:00.000Z"),
-        items: {
-          create: [
-            {
-              productId: product.id,
-              productName: product.name,
-              productUnit: product.unit,
-              quantity: new Prisma.Decimal(3),
-              unitPrice: new Prisma.Decimal(30),
-              unitCost: new Prisma.Decimal(20),
-              lineTotal: new Prisma.Decimal(90),
-              lineCost: new Prisma.Decimal(60),
-              grossProfit: new Prisma.Decimal(30),
-            },
-          ],
-        },
-      },
+    const sale = await saleService.create({
+      sellerId: seller.id,
+      paymentMethod: PaymentMethod.CASH,
+      paymentStatus: PaymentStatus.PAID,
+      discountAmount: 0,
+      soldAt: new Date("2026-09-15T08:00:00.000Z"),
+      items: [{ productId: product.id, quantity: 3 }],
+    });
+    await saleService.voidSale({
+      saleId: sale.id,
+      voidedById: manager.id,
+      reason: "Integration report exclusion",
     });
 
     const summary = await reportService.getPeriodSummary("today", {}, now);

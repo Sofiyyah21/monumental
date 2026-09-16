@@ -36,6 +36,8 @@ export type TrackedStockDeltaInput = {
   saleId?: string;
   occurredAt?: Date;
   userId: string;
+  requireActive?: boolean;
+  requireUnitMatch?: boolean;
 };
 
 export class InventoryService {
@@ -222,8 +224,14 @@ export async function applyTrackedStockDelta(
     input.movementQuantity.toString(),
   );
   assertPositiveMovementQuantity(movementQuantity);
-  const product = await findActiveProductForUpdate(tx, input.productId);
-  assertUnitMatchesProduct(product.unit, input.unit);
+  const product = await findProductForUpdate(
+    tx,
+    input.productId,
+    input.requireActive ?? true,
+  );
+  if (input.requireUnitMatch ?? true) {
+    assertUnitMatchesProduct(product.unit, input.unit);
+  }
 
   const previousStock = new Prisma.Decimal(product.currentStock);
   const quantityChange = new Prisma.Decimal(input.quantityChange.toString());
@@ -270,13 +278,17 @@ export async function applyTrackedStockDelta(
   return { product: updatedProduct, movement };
 }
 
-async function findActiveProductForUpdate(tx: DbClient, productId: string) {
+async function findProductForUpdate(
+  tx: DbClient,
+  productId: string,
+  requireActive: boolean,
+) {
   await tx.$queryRaw`
     SELECT "id" FROM "Product" WHERE "id" = ${productId} FOR UPDATE
   `;
 
   const product = await tx.product.findUnique({ where: { id: productId } });
-  if (!product || !product.active) {
+  if (!product || (requireActive && !product.active)) {
     throw new AppError("Product not found", 404, "PRODUCT_NOT_FOUND");
   }
   return product;

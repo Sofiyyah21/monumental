@@ -9,6 +9,7 @@ import {
   createSaleSchema,
   listSalesQuerySchema,
   saleIdParamSchema,
+  voidSaleSchema,
 } from "../validation/sale.schema.js";
 
 export function createSaleRoutes(
@@ -30,6 +31,13 @@ export function createSaleRoutes(
     authorizePermission(permissions.READ_SALES),
     validate({ params: saleIdParamSchema }),
     asyncHandler(controller.getById),
+  );
+  router.post(
+    "/:id/void",
+    authenticateRequest,
+    authorizePermission(permissions.VOID_SALES),
+    validate({ params: saleIdParamSchema, body: voidSaleSchema }),
+    asyncHandler(controller.void),
   );
   router.post(
     "/",

@@ -66,6 +66,7 @@ model User {
   refreshTokens RefreshToken[]
   sales          Sale[]        @relation("SellerSales")
   customerSales  Sale[]        @relation("CustomerSales")
+  voidedSales    Sale[]        @relation("VoidedSales")
   stockMovements StockMovement[]
 
   @@index([role, active])
@@ -122,12 +123,16 @@ model Sale {
   totalAmount      Decimal       @db.Decimal(12, 2)
   totalCost        Decimal       @db.Decimal(12, 2)
   grossProfit      Decimal       @db.Decimal(12, 2)
+  voidedAt         DateTime?
+  voidedById       String?
+  voidReason       String?
   soldAt           DateTime      @default(now())
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
   seller User  @relation("SellerSales", fields: [sellerId], references: [id])
   customer User? @relation("CustomerSales", fields: [customerId], references: [id])
+  voidedBy User? @relation("VoidedSales", fields: [voidedById], references: [id])
   items   SaleItem[]
   stockMovements StockMovement[]
 
@@ -136,6 +141,7 @@ model Sale {
   @@index([customerId])
   @@index([status, soldAt])
   @@index([paymentStatus, soldAt])
+  @@index([voidedById, voidedAt])
 }
 
 model SaleItem {
