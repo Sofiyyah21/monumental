@@ -270,4 +270,78 @@ describe("ApiClient", () => {
       "https://api.test/api/v1/products/product_1/deactivate",
     );
   });
+
+  it("uses the inventory API contract", async () => {
+    const requests: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push([input, init]);
+        return jsonResponse({ success: true, data: [] });
+      },
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: new MemoryTokenStorage(),
+      fetchImpl,
+    });
+
+    await client.listInventory({ active: true, lowStock: false });
+    await client.listLowStockInventory();
+    await client.getProductInventory("product_1");
+    await client.listStockMovements({
+      productId: "product_1",
+      type: "RECEIVED",
+      from: "2026-09-01T00:00:00.000Z",
+      to: "2026-09-15T23:59:59.999Z",
+      limit: 25,
+    });
+    await client.receiveStock({
+      productId: "product_1",
+      quantity: 5,
+      unit: "PACK",
+      unitCost: 100,
+      reference: "INV-1",
+      note: "Restock",
+    });
+    await client.adjustStock({
+      productId: "product_1",
+      quantityChange: -1,
+      unit: "PACK",
+      reason: "Count correction",
+    });
+    await client.returnStock({
+      productId: "product_1",
+      quantity: 1,
+      unit: "PACK",
+    });
+    await client.recordDamage({
+      productId: "product_1",
+      quantity: 1,
+      unit: "PACK",
+      reason: "Damaged bottle",
+    });
+
+    expect(requests.map((request) => request[0])).toEqual([
+      "https://api.test/api/v1/inventory?active=true&lowStock=false",
+      "https://api.test/api/v1/inventory/low-stock",
+      "https://api.test/api/v1/inventory/products/product_1",
+      "https://api.test/api/v1/inventory/movements?productId=product_1&type=RECEIVED&from=2026-09-01T00%3A00%3A00.000Z&to=2026-09-15T23%3A59%3A59.999Z&limit=25",
+      "https://api.test/api/v1/inventory/receive",
+      "https://api.test/api/v1/inventory/adjust",
+      "https://api.test/api/v1/inventory/returns",
+      "https://api.test/api/v1/inventory/damage",
+    ]);
+    expect(requests[4]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(requests[5]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(requests[6]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(requests[7]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

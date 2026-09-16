@@ -4,6 +4,7 @@ import { useAuth } from "./auth/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/Feedback";
 import { DashboardPage } from "./dashboard/DashboardPage";
+import { InventoryPage } from "./inventory/InventoryPage";
 import { FoundationPage } from "./pages/FoundationPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -96,6 +97,14 @@ function AppRoutes() {
     return (
       <AppShell activeRoute={activeRoute}>
         <ProductPage />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.inventory.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <InventoryPage />
       </AppShell>
     );
   }

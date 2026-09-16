@@ -5,6 +5,9 @@ import type {
   ApiEnvelope,
   AuthResponse,
   BestSellersReport,
+  InventoryFilters,
+  InventoryItem,
+  InventoryMutationResult,
   LowStockReportItem,
   Product,
   ProductFilters,
@@ -13,6 +16,12 @@ import type {
   ReportPeriod,
   Sale,
   SalesSummaryReport,
+  StockAdjustmentInput,
+  StockDamageInput,
+  StockMovement,
+  StockMovementFilters,
+  StockReceiptInput,
+  StockReturnInput,
 } from "./types";
 import type { CurrentUser } from "./types";
 
@@ -185,6 +194,56 @@ export class ApiClient {
   async deactivateProduct(id: string) {
     return this.request<Product>(`/products/${id}/deactivate`, {
       method: "PATCH",
+    });
+  }
+
+  async listInventory(filters: InventoryFilters = {}) {
+    const query = toQueryString(filters);
+    return this.request<InventoryItem[]>(
+      `/inventory${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async listLowStockInventory() {
+    return this.request<InventoryItem[]>("/inventory/low-stock");
+  }
+
+  async getProductInventory(productId: string) {
+    return this.request<InventoryItem>(`/inventory/products/${productId}`);
+  }
+
+  async listStockMovements(filters: StockMovementFilters = {}) {
+    const query = toQueryString(filters);
+    return this.request<StockMovement[]>(
+      `/inventory/movements${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async receiveStock(input: StockReceiptInput) {
+    return this.request<InventoryMutationResult>("/inventory/receive", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async adjustStock(input: StockAdjustmentInput) {
+    return this.request<InventoryMutationResult>("/inventory/adjust", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async returnStock(input: StockReturnInput) {
+    return this.request<InventoryMutationResult>("/inventory/returns", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async recordDamage(input: StockDamageInput) {
+    return this.request<InventoryMutationResult>("/inventory/damage", {
+      method: "POST",
+      body: JSON.stringify(input),
     });
   }
 

@@ -5,6 +5,8 @@ export type SaleStatus = "COMPLETED" | "VOIDED" | "REFUNDED";
 export type PaymentMethod = "CASH" | "TRANSFER" | "CARD" | "OTHER";
 export type PaymentStatus = "PAID" | "PENDING";
 export type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+export type StockMovementType =
+  "RECEIVED" | "SOLD" | "ADJUSTMENT" | "RETURN" | "DAMAGE";
 
 export type Permission =
   | "manage:users"
@@ -136,6 +138,93 @@ export type ProductInput = {
 
 export type ProductUpdateInput = Partial<ProductInput> & {
   active?: boolean;
+};
+
+export type InventoryItem = {
+  productId: string;
+  name: string;
+  sku: string;
+  category: ProductCategory;
+  unit: ProductUnit;
+  currentStock: string;
+  reorderLevel: string;
+  lowStock: boolean;
+  active: boolean;
+};
+
+export type InventoryFilters = {
+  active?: boolean;
+  lowStock?: boolean;
+};
+
+export type InventoryUserSnapshot = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+};
+
+export type StockMovement = {
+  id: string;
+  productId: string;
+  type: StockMovementType;
+  quantity: string;
+  previousStock: string;
+  newStock: string;
+  unitCost: string | null;
+  reference: string | null;
+  note: string | null;
+  saleId: string | null;
+  createdById: string | null;
+  occurredAt: string;
+  product?: Product;
+  createdBy?: InventoryUserSnapshot | null;
+};
+
+export type StockMovementFilters = {
+  productId?: string;
+  type?: StockMovementType;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+export type StockReceiptInput = {
+  productId: string;
+  quantity: number;
+  unit: ProductUnit;
+  unitCost?: number;
+  reference?: string;
+  note?: string;
+};
+
+export type StockAdjustmentInput = {
+  productId: string;
+  quantityChange: number;
+  unit: ProductUnit;
+  reason: string;
+  reference?: string;
+};
+
+export type StockReturnInput = {
+  productId: string;
+  quantity: number;
+  unit: ProductUnit;
+  reference?: string;
+  note?: string;
+};
+
+export type StockDamageInput = {
+  productId: string;
+  quantity: number;
+  unit: ProductUnit;
+  reason: string;
+  reference?: string;
+};
+
+export type InventoryMutationResult = {
+  product: Product;
+  movement: StockMovement;
 };
 
 export type ApiSuccess<T> = {
