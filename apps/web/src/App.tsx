@@ -7,6 +7,7 @@ import { DashboardPage } from "./dashboard/DashboardPage";
 import { FoundationPage } from "./pages/FoundationPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ProductPage } from "./products/ProductPage";
 import {
   canAccessRoute,
   findRoute,
@@ -87,6 +88,14 @@ function AppRoutes() {
     return (
       <AppShell activeRoute={activeRoute}>
         <DashboardPage />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.products.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <ProductPage />
       </AppShell>
     );
   }

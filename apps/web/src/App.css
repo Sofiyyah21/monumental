@@ -581,6 +581,176 @@
   text-align: right;
 }
 
+.product-grid {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.product-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, auto);
+}
+
+.product-note {
+  align-self: start;
+  background: var(--color-brand-soft);
+  border-left: 4px solid var(--color-brand);
+  border-radius: 6px;
+  color: var(--color-brand-strong);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+}
+
+.product-note span {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.product-filters {
+  align-items: end;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.3fr) repeat(3, minmax(10rem, 1fr));
+}
+
+.product-filters label,
+.product-form label {
+  color: var(--color-muted);
+  display: grid;
+  font-size: 0.88rem;
+  font-weight: 800;
+  gap: var(--space-2);
+}
+
+.product-filters input,
+.product-filters select,
+.product-form input,
+.product-form select {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  min-height: 2.65rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.product-form small {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.product-layout {
+  align-items: start;
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+}
+
+.product-list-panel {
+  min-width: 0;
+}
+
+.product-table-wrap {
+  overflow-x: auto;
+}
+
+.product-table {
+  border-collapse: collapse;
+  min-width: 58rem;
+  width: 100%;
+}
+
+.product-table th,
+.product-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.85rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.product-table th {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.product-table td strong {
+  color: var(--color-text);
+  display: block;
+}
+
+.product-table td span:not(.status-badge) {
+  color: var(--color-muted);
+  display: block;
+  font-size: 0.84rem;
+}
+
+.table-actions,
+.form-actions,
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.button--danger,
+.button--danger-quiet {
+  color: var(--color-danger);
+}
+
+.button--danger {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+}
+
+.button--danger-quiet {
+  background: transparent;
+  border-color: var(--color-border);
+}
+
+.button--danger-quiet:hover {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+}
+
+.product-form-panel {
+  position: sticky;
+  top: var(--space-5);
+}
+
+.product-form {
+  gap: var(--space-4);
+}
+
+.form-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.confirm-backdrop {
+  align-items: center;
+  background: rgba(43, 36, 28, 0.42);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: var(--space-5);
+  position: fixed;
+  z-index: 20;
+}
+
+.confirm-dialog {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: var(--space-4);
+  max-width: 31rem;
+  padding: var(--space-6);
+  width: 100%;
+}
+
 @keyframes spin {
   to {
     transform: rotate(1turn);
@@ -663,6 +833,16 @@
   .rank-list dl {
     grid-column: 2;
   }
+
+  .product-hero,
+  .product-filters,
+  .product-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .product-form-panel {
+    position: static;
+  }
 }
 
 @media (max-width: 520px) {
@@ -691,5 +871,49 @@
 
   .sale-money {
     text-align: left;
+  }
+
+  .product-table {
+    min-width: 0;
+  }
+
+  .product-table thead {
+    display: none;
+  }
+
+  .product-table,
+  .product-table tbody,
+  .product-table tr,
+  .product-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .product-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2);
+  }
+
+  .product-table td {
+    align-items: start;
+    border-bottom: 0;
+    display: grid;
+    gap: var(--space-2);
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    padding: 0.45rem;
+  }
+
+  .product-table td::before {
+    color: var(--color-muted);
+    content: attr(data-label);
+    font-size: 0.72rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,4 +1,5 @@
 export type UserRole = "ADMIN" | "MANAGER" | "STAFF" | "CUSTOMER";
+export type ProductCategory = "DRINKS" | "NOODLES" | "VEGETABLE_OIL" | "SUGAR";
 export type ProductUnit = "PACK" | "LITER" | "CUP";
 export type SaleStatus = "COMPLETED" | "VOIDED" | "REFUNDED";
 export type PaymentMethod = "CASH" | "TRANSFER" | "CARD" | "OTHER";
@@ -99,6 +100,42 @@ export type Sale = {
   grossProfit: string;
   soldAt: string;
   items?: SaleItem[];
+};
+
+export type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  category: ProductCategory;
+  unit: ProductUnit;
+  costPrice: string;
+  sellingPrice: string;
+  currentStock: string;
+  reorderLevel: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductFilters = {
+  search?: string;
+  category?: ProductCategory;
+  unit?: ProductUnit;
+  active?: boolean;
+};
+
+export type ProductInput = {
+  name: string;
+  sku: string;
+  category: ProductCategory;
+  unit: ProductUnit;
+  costPrice: number;
+  sellingPrice: number;
+  reorderLevel: number;
+};
+
+export type ProductUpdateInput = Partial<ProductInput> & {
+  active?: boolean;
 };
 
 export type ApiSuccess<T> = {

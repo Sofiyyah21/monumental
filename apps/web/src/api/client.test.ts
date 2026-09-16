@@ -204,4 +204,70 @@ describe("ApiClient", () => {
       "https://api.test/api/v1/sales?from=2026-09-01T00%3A00%3A00.000Z&to=2026-09-15T23%3A59%3A59.999Z&limit=5&status=COMPLETED",
     ]);
   });
+
+  it("uses the product management API contract", async () => {
+    const product = {
+      id: "product_1",
+      name: "Vegetable Oil",
+      sku: "OIL-1",
+      category: "VEGETABLE_OIL",
+      unit: "LITER",
+      costPrice: "800.00",
+      sellingPrice: "1000.00",
+      currentStock: "4.000",
+      reorderLevel: "2.000",
+      active: true,
+      createdAt: "2026-09-15T09:00:00.000Z",
+      updatedAt: "2026-09-15T09:00:00.000Z",
+    };
+    const requests: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push([input, init]);
+        return jsonResponse({ success: true, data: product });
+      },
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: new MemoryTokenStorage(),
+      fetchImpl,
+    });
+
+    await client.listProducts({
+      search: "oil",
+      category: "VEGETABLE_OIL",
+      unit: "LITER",
+      active: false,
+    });
+    await client.createProduct({
+      name: "Vegetable Oil",
+      sku: "oil-1",
+      category: "VEGETABLE_OIL",
+      unit: "LITER",
+      costPrice: 800,
+      sellingPrice: 1000,
+      reorderLevel: 2,
+    });
+    await client.updateProduct("product_1", { sellingPrice: 1100 });
+    await client.deactivateProduct("product_1");
+
+    expect(requests[0]?.[0]).toBe(
+      "https://api.test/api/v1/products?search=oil&category=VEGETABLE_OIL&unit=LITER&active=false",
+    );
+    expect(requests[1]?.[0]).toBe("https://api.test/api/v1/products");
+    expect(requests[1]?.[1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(requests[2]?.[0]).toBe("https://api.test/api/v1/products/product_1");
+    expect(requests[2]?.[1]).toEqual(
+      expect.objectContaining({
+        method: "PATCH",
+      }),
+    );
+    expect(requests[3]?.[0]).toBe(
+      "https://api.test/api/v1/products/product_1/deactivate",
+    );
+  });
 });

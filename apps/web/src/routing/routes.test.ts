@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CurrentUser, UserRole } from "../api/types";
+import { hasPermission, permissions } from "../auth/permissions";
 import {
   canAccessRoute,
   getDefaultRouteForUser,
@@ -42,8 +43,10 @@ describe("route authorization", () => {
     const labels = getVisibleNavigation(manager).map((route) => route.navLabel);
 
     expect(labels).toEqual(["Products", "Inventory", "Sales", "Reports"]);
+    expect(canAccessRoute(manager, routes.products)).toBe(true);
     expect(canAccessRoute(manager, routes.reports)).toBe(true);
     expect(canAccessRoute(manager, routes.admin)).toBe(false);
+    expect(hasPermission(manager, permissions.MANAGE_PRODUCTS)).toBe(true);
   });
 
   it("shows staff operational areas only", () => {
@@ -51,8 +54,11 @@ describe("route authorization", () => {
     const labels = getVisibleNavigation(staff).map((route) => route.navLabel);
 
     expect(labels).toEqual(["Products", "Inventory", "Sales"]);
+    expect(canAccessRoute(staff, routes.products)).toBe(true);
     expect(canAccessRoute(staff, routes.reports)).toBe(false);
     expect(canAccessRoute(staff, routes.admin)).toBe(false);
+    expect(hasPermission(staff, permissions.READ_PRODUCTS)).toBe(true);
+    expect(hasPermission(staff, permissions.MANAGE_PRODUCTS)).toBe(false);
   });
 
   it("keeps customers in the customer-facing area", () => {
@@ -62,6 +68,7 @@ describe("route authorization", () => {
     );
 
     expect(labels).toEqual(["Customer"]);
+    expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.reports)).toBe(false);
     expect(canAccessRoute(customer, routes.admin)).toBe(false);

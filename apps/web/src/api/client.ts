@@ -6,6 +6,10 @@ import type {
   AuthResponse,
   BestSellersReport,
   LowStockReportItem,
+  Product,
+  ProductFilters,
+  ProductInput,
+  ProductUpdateInput,
   ReportPeriod,
   Sale,
   SalesSummaryReport,
@@ -159,6 +163,31 @@ export class ApiClient {
     return this.request<Sale[]>(`/sales${query ? `?${query}` : ""}`);
   }
 
+  async listProducts(filters: ProductFilters = {}) {
+    const query = toQueryString(filters);
+    return this.request<Product[]>(`/products${query ? `?${query}` : ""}`);
+  }
+
+  async createProduct(input: ProductInput) {
+    return this.request<Product>("/products", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateProduct(id: string, input: ProductUpdateInput) {
+    return this.request<Product>(`/products/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deactivateProduct(id: string) {
+    return this.request<Product>(`/products/${id}/deactivate`, {
+      method: "PATCH",
+    });
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const response = await this.send(path, options);
 
@@ -219,7 +248,9 @@ export class ApiClient {
   }
 }
 
-function toQueryString(filters: Record<string, string | number | undefined>) {
+function toQueryString(
+  filters: Record<string, string | number | boolean | undefined>,
+) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value !== undefined) {
