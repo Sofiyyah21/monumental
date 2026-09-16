@@ -17,6 +17,8 @@ type RouteKey =
   | "products"
   | "inventory"
   | "sales"
+  | "salesHistory"
+  | "saleDetail"
   | "reports"
   | "customer"
   | "forbidden";
@@ -57,6 +59,21 @@ export const routes: Record<RouteKey, AppRoute> = {
     title: "Sales",
     description: "Point-of-sale operations foundation.",
     navLabel: "Sales",
+    requiresAuth: true,
+    permission: permissions.READ_SALES,
+  },
+  salesHistory: {
+    path: "/sales/history",
+    title: "Sales history",
+    description: "Completed sales, sale detail, and receipt workspace.",
+    navLabel: "Sales History",
+    requiresAuth: true,
+    permission: permissions.READ_SALES,
+  },
+  saleDetail: {
+    path: "/sales/:id",
+    title: "Sale detail",
+    description: "Persisted sale detail and receipt view.",
     requiresAuth: true,
     permission: permissions.READ_SALES,
   },
@@ -124,5 +141,12 @@ export function getDefaultRouteForUser(user: CurrentUser) {
 }
 
 export function findRoute(pathname: string) {
-  return appRoutes.find((route) => route.path === pathname);
+  const exactRoute = appRoutes.find((route) => route.path === pathname);
+  if (exactRoute) {
+    return exactRoute;
+  }
+  if (pathname.startsWith("/sales/") && pathname !== routes.salesHistory.path) {
+    return routes.saleDetail;
+  }
+  return undefined;
 }

@@ -15,13 +15,14 @@ import {
   getDefaultRouteForUser,
   routes,
 } from "./routing/routes";
+import { SaleDetailPage, SalesHistoryPage } from "./sales/SalesHistoryPage";
 import { SalesPage } from "./sales/SalesPage";
 import { useBrowserRoute } from "./routing/useBrowserRoute";
 import "./App.css";
 
 function AppRoutes() {
   const auth = useAuth();
-  const { pathname, replace } = useBrowserRoute();
+  const { pathname, navigate, replace } = useBrowserRoute();
   const activeRoute = findRoute(pathname);
 
   useEffect(() => {
@@ -113,7 +114,28 @@ function AppRoutes() {
   if (activeRoute.path === routes.sales.path) {
     return (
       <AppShell activeRoute={activeRoute}>
-        <SalesPage />
+        <SalesPage onOpenSale={(id) => navigate(`/sales/${id}`)} />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.salesHistory.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <SalesHistoryPage onOpenSale={(id) => navigate(`/sales/${id}`)} />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.saleDetail.path) {
+    const saleId = decodeURIComponent(pathname.replace("/sales/", ""));
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <SaleDetailPage
+          onBackToHistory={() => navigate(routes.salesHistory.path)}
+          onNewSale={() => navigate(routes.sales.path)}
+          saleId={saleId}
+        />
       </AppShell>
     );
   }

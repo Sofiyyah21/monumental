@@ -3,6 +3,7 @@ import type { CurrentUser, UserRole } from "../api/types";
 import { hasPermission, permissions } from "../auth/permissions";
 import {
   canAccessRoute,
+  findRoute,
   getDefaultRouteForUser,
   getVisibleNavigation,
   routes,
@@ -34,6 +35,7 @@ describe("route authorization", () => {
       "Products",
       "Inventory",
       "Sales",
+      "Sales History",
       "Reports",
     ]);
   });
@@ -42,7 +44,13 @@ describe("route authorization", () => {
     const manager = user("MANAGER");
     const labels = getVisibleNavigation(manager).map((route) => route.navLabel);
 
-    expect(labels).toEqual(["Products", "Inventory", "Sales", "Reports"]);
+    expect(labels).toEqual([
+      "Products",
+      "Inventory",
+      "Sales",
+      "Sales History",
+      "Reports",
+    ]);
     expect(canAccessRoute(manager, routes.products)).toBe(true);
     expect(canAccessRoute(manager, routes.inventory)).toBe(true);
     expect(canAccessRoute(manager, routes.reports)).toBe(true);
@@ -56,7 +64,7 @@ describe("route authorization", () => {
     const staff = user("STAFF");
     const labels = getVisibleNavigation(staff).map((route) => route.navLabel);
 
-    expect(labels).toEqual(["Products", "Inventory", "Sales"]);
+    expect(labels).toEqual(["Products", "Inventory", "Sales", "Sales History"]);
     expect(canAccessRoute(staff, routes.products)).toBe(true);
     expect(canAccessRoute(staff, routes.inventory)).toBe(true);
     expect(canAccessRoute(staff, routes.reports)).toBe(false);
@@ -78,6 +86,8 @@ describe("route authorization", () => {
     expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.sales)).toBe(false);
+    expect(canAccessRoute(customer, routes.salesHistory)).toBe(false);
+    expect(canAccessRoute(customer, routes.saleDetail)).toBe(false);
     expect(canAccessRoute(customer, routes.reports)).toBe(false);
     expect(canAccessRoute(customer, routes.admin)).toBe(false);
     expect(getDefaultRouteForUser(customer)).toBe("/customer");
@@ -87,5 +97,10 @@ describe("route authorization", () => {
     expect(getDefaultRouteForUser(user("ADMIN"))).toBe("/admin");
     expect(getDefaultRouteForUser(user("MANAGER"))).toBe("/reports");
     expect(getDefaultRouteForUser(user("STAFF"))).toBe("/sales");
+  });
+
+  it("recognizes sales history and dynamic sale detail routes", () => {
+    expect(findRoute("/sales/history")).toBe(routes.salesHistory);
+    expect(findRoute("/sales/sale_1")).toBe(routes.saleDetail);
   });
 });

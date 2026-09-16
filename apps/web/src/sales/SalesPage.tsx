@@ -29,7 +29,7 @@ import {
   usePos,
 } from "./usePos";
 
-export function SalesPage() {
+export function SalesPage({ onOpenSale }: { onOpenSale(id: string): void }) {
   const {
     addToCart,
     cart,
@@ -78,6 +78,7 @@ export function SalesPage() {
       onCheckoutChange={setCheckout}
       onCompleteSale={() => void submitSale()}
       onFilterChange={setFilters}
+      onOpenSale={onOpenSale}
       onQuantityDraftChange={(productId, quantity) =>
         setQuantityDrafts((drafts) => ({ ...drafts, [productId]: quantity }))
       }
@@ -104,6 +105,7 @@ export function PosView({
   onCheckoutChange,
   onCompleteSale,
   onFilterChange,
+  onOpenSale,
   onQuantityDraftChange,
   onRemoveFromCart,
   onUpdateCartQuantity,
@@ -124,6 +126,7 @@ export function PosView({
   onCheckoutChange(checkout: CheckoutFields): void;
   onCompleteSale(): void;
   onFilterChange(filters: PosProductFilters): void;
+  onOpenSale(id: string): void;
   onQuantityDraftChange(productId: string, quantity: string): void;
   onRemoveFromCart(productId: string): void;
   onUpdateCartQuantity(productId: string, quantity: number): void;
@@ -161,7 +164,9 @@ export function PosView({
       ) : null}
       {formError ? <Alert title="Check sale details">{formError}</Alert> : null}
 
-      {completedSale ? <SaleSuccessPanel sale={completedSale} /> : null}
+      {completedSale ? (
+        <SaleSuccessPanel onOpenSale={onOpenSale} sale={completedSale} />
+      ) : null}
 
       <div className="pos-main">
         <section
@@ -514,7 +519,13 @@ function CartPanel({
   );
 }
 
-function SaleSuccessPanel({ sale }: { sale: Sale }) {
+function SaleSuccessPanel({
+  onOpenSale,
+  sale,
+}: {
+  onOpenSale(id: string): void;
+  sale: Sale;
+}) {
   return (
     <section
       className="panel sale-success"
@@ -530,9 +541,18 @@ function SaleSuccessPanel({ sale }: { sale: Sale }) {
           {formatCartMoney(sale.totalAmount)}
         </p>
       </div>
-      <span className="status-badge status-badge--IN_STOCK">
-        Ready for next sale
-      </span>
+      <div className="sale-success-actions">
+        <button
+          className="button button--quiet"
+          onClick={() => onOpenSale(sale.id)}
+          type="button"
+        >
+          View receipt
+        </button>
+        <span className="status-badge status-badge--IN_STOCK">
+          Ready for next sale
+        </span>
+      </div>
     </section>
   );
 }

@@ -128,6 +128,7 @@ function renderPos(
       onCheckoutChange={vi.fn()}
       onCompleteSale={vi.fn()}
       onFilterChange={vi.fn()}
+      onOpenSale={vi.fn()}
       onQuantityDraftChange={vi.fn()}
       onRemoveFromCart={vi.fn()}
       onUpdateCartQuantity={vi.fn()}
@@ -191,6 +192,7 @@ describe("PosView", () => {
       }),
     ).toContain("Sale failed");
     expect(renderPos({ completedSale })).toContain("MD-20260915-00001");
+    expect(renderPos({ completedSale })).toContain("View receipt");
     expect(renderPos({ completedSale })).toContain("Ready for next sale");
   });
 });

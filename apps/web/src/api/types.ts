@@ -94,6 +94,13 @@ export type SaleItem = {
   grossProfit: string;
 };
 
+export type SaleUserSnapshot = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+};
+
 export type Sale = {
   id: string;
   reference: string;
@@ -112,6 +119,8 @@ export type Sale = {
   createdAt?: string;
   updatedAt?: string;
   items?: SaleItem[];
+  seller?: SaleUserSnapshot;
+  customer?: SaleUserSnapshot | null;
 };
 
 export type SaleFilters = {
