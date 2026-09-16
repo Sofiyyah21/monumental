@@ -134,4 +134,74 @@ describe("ApiClient", () => {
       }),
     );
   });
+
+  it("requests reporting period summaries and supporting dashboard data", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      jsonResponse({
+        success: true,
+        data: String(input).includes("best-sellers")
+          ? {
+              period: "today",
+              range: { start: "", end: "" },
+              rankingMetric: "quantitySold",
+              products: [],
+            }
+          : String(input).includes("low-stock")
+            ? []
+            : String(input).includes("sales?")
+              ? []
+              : {
+                  period: "today",
+                  range: {
+                    start: "2026-09-14T23:00:00.000Z",
+                    end: "2026-09-15T23:00:00.000Z",
+                  },
+                  salesCount: 0,
+                  unitsSold: "0.000",
+                  revenue: "0.00",
+                  cogs: "0.00",
+                  grossProfit: "0.00",
+                  discounts: "0.00",
+                  averageSaleValue: "0.00",
+                },
+      }),
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: new MemoryTokenStorage(),
+      fetchImpl,
+    });
+
+    await client.getSalesSummary("today");
+    await client.getSalesSummary("week");
+    await client.getSalesSummary("month");
+    await client.getSalesSummary("year");
+    await client.getSalesSummary("custom", {
+      from: "2026-09-01",
+      to: "2026-09-15",
+    });
+    await client.getBestSellers({
+      from: "2026-09-01T00:00:00.000Z",
+      to: "2026-09-15T23:59:59.999Z",
+      limit: 5,
+    });
+    await client.getLowStock();
+    await client.getRecentSales({
+      from: "2026-09-01T00:00:00.000Z",
+      to: "2026-09-15T23:59:59.999Z",
+      limit: 5,
+    });
+
+    const urls = fetchImpl.mock.calls.map((call) => call[0]);
+    expect(urls).toEqual([
+      "https://api.test/api/v1/reports/today",
+      "https://api.test/api/v1/reports/week",
+      "https://api.test/api/v1/reports/month",
+      "https://api.test/api/v1/reports/year",
+      "https://api.test/api/v1/reports/sales?from=2026-09-01&to=2026-09-15",
+      "https://api.test/api/v1/reports/best-sellers?from=2026-09-01T00%3A00%3A00.000Z&to=2026-09-15T23%3A59%3A59.999Z&limit=5",
+      "https://api.test/api/v1/reports/low-stock",
+      "https://api.test/api/v1/sales?from=2026-09-01T00%3A00%3A00.000Z&to=2026-09-15T23%3A59%3A59.999Z&limit=5&status=COMPLETED",
+    ]);
+  });
 });

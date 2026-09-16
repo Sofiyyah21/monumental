@@ -1,7 +1,16 @@
 import { config } from "../config";
 import type { TokenStorage } from "../auth/token-storage";
 import { SessionTokenStorage } from "../auth/token-storage";
-import type { ApiEnvelope, AuthResponse, CurrentUser } from "./types";
+import type {
+  ApiEnvelope,
+  AuthResponse,
+  BestSellersReport,
+  LowStockReportItem,
+  ReportPeriod,
+  Sale,
+  SalesSummaryReport,
+} from "./types";
+import type { CurrentUser } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -102,6 +111,54 @@ export class ApiClient {
     return this.request<CurrentUser>("/auth/me");
   }
 
+  async getSalesSummary(
+    period: ReportPeriod | "custom",
+    filters: { from?: string; to?: string } = {},
+  ) {
+    const query = new URLSearchParams();
+    if (filters.from) {
+      query.set("from", filters.from);
+    }
+    if (filters.to) {
+      query.set("to", filters.to);
+    }
+
+    const queryString = query.toString();
+    const path =
+      period === "custom"
+        ? `/reports/sales${queryString ? `?${queryString}` : ""}`
+        : `/reports/${period}`;
+
+    return this.request<SalesSummaryReport>(path);
+  }
+
+  async getBestSellers(filters: {
+    from?: string;
+    to?: string;
+    limit?: number;
+  }) {
+    const query = toQueryString(filters);
+    return this.request<BestSellersReport>(
+      `/reports/best-sellers${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async getLowStock() {
+    return this.request<LowStockReportItem[]>("/reports/low-stock");
+  }
+
+  async getRecentSales(filters: {
+    from?: string;
+    to?: string;
+    limit?: number;
+  }) {
+    const query = toQueryString({
+      ...filters,
+      status: "COMPLETED",
+    });
+    return this.request<Sale[]>(`/sales${query ? `?${query}` : ""}`);
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const response = await this.send(path, options);
 
@@ -160,6 +217,16 @@ export class ApiClient {
 
     return payload.data;
   }
+}
+
+function toQueryString(filters: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined) {
+      query.set(key, value.toString());
+    }
+  }
+  return query.toString();
 }
 
 export const apiClient = new ApiClient();

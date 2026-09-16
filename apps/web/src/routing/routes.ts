@@ -114,6 +114,9 @@ export function getDefaultRouteForUser(user: CurrentUser) {
   if (user.role === "ADMIN") {
     return routes.admin.path;
   }
+  if (hasPermission(user, permissions.READ_REPORTS)) {
+    return routes.reports.path;
+  }
   if (hasPermission(user, permissions.READ_SALES)) {
     return routes.sales.path;
   }

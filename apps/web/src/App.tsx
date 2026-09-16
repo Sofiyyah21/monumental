@@ -3,6 +3,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/Feedback";
+import { DashboardPage } from "./dashboard/DashboardPage";
 import { FoundationPage } from "./pages/FoundationPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -75,6 +76,17 @@ function AppRoutes() {
         <ForbiddenPage
           onGoHome={() => replace(getDefaultRouteForUser(auth.user!))}
         />
+      </AppShell>
+    );
+  }
+
+  if (
+    activeRoute.path === routes.admin.path ||
+    activeRoute.path === routes.reports.path
+  ) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <DashboardPage />
       </AppShell>
     );
   }

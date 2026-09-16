@@ -42,6 +42,7 @@ describe("route authorization", () => {
     const labels = getVisibleNavigation(manager).map((route) => route.navLabel);
 
     expect(labels).toEqual(["Products", "Inventory", "Sales", "Reports"]);
+    expect(canAccessRoute(manager, routes.reports)).toBe(true);
     expect(canAccessRoute(manager, routes.admin)).toBe(false);
   });
 
@@ -63,12 +64,13 @@ describe("route authorization", () => {
     expect(labels).toEqual(["Customer"]);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.reports)).toBe(false);
+    expect(canAccessRoute(customer, routes.admin)).toBe(false);
     expect(getDefaultRouteForUser(customer)).toBe("/customer");
   });
 
   it("chooses role-appropriate landing routes", () => {
     expect(getDefaultRouteForUser(user("ADMIN"))).toBe("/admin");
-    expect(getDefaultRouteForUser(user("MANAGER"))).toBe("/sales");
+    expect(getDefaultRouteForUser(user("MANAGER"))).toBe("/reports");
     expect(getDefaultRouteForUser(user("STAFF"))).toBe("/sales");
   });
 });
