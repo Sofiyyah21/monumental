@@ -82,11 +82,15 @@ export type LowStockReportItem = {
 
 export type SaleItem = {
   id: string;
+  saleId?: string;
   productId: string;
   productName: string;
   productUnit: ProductUnit;
   quantity: string;
+  unitPrice: string;
+  unitCost?: string;
   lineTotal: string;
+  lineCost?: string;
   grossProfit: string;
 };
 
@@ -98,10 +102,39 @@ export type Sale = {
   status: SaleStatus;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  paymentReference?: string | null;
+  subtotal: string;
+  discountAmount: string;
   totalAmount: string;
+  totalCost?: string;
   grossProfit: string;
   soldAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   items?: SaleItem[];
+};
+
+export type SaleFilters = {
+  sellerId?: string;
+  customerId?: string;
+  status?: SaleStatus;
+  paymentStatus?: PaymentStatus;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+export type CreateSaleInput = {
+  customerId?: string;
+  paymentMethod: PaymentMethod;
+  paymentStatus?: PaymentStatus;
+  paymentReference?: string;
+  discountAmount?: number;
+  soldAt?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
 };
 
 export type Product = {

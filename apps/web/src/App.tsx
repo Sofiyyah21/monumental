@@ -15,6 +15,7 @@ import {
   getDefaultRouteForUser,
   routes,
 } from "./routing/routes";
+import { SalesPage } from "./sales/SalesPage";
 import { useBrowserRoute } from "./routing/useBrowserRoute";
 import "./App.css";
 
@@ -105,6 +106,14 @@ function AppRoutes() {
     return (
       <AppShell activeRoute={activeRoute}>
         <InventoryPage />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.sales.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <SalesPage />
       </AppShell>
     );
   }

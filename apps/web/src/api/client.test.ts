@@ -344,4 +344,60 @@ describe("ApiClient", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("uses the sales API contract", async () => {
+    const sale = {
+      id: "sale_1",
+      reference: "MD-20260915-00001",
+      sellerId: "user_1",
+      customerId: null,
+      status: "COMPLETED",
+      paymentMethod: "CASH",
+      paymentStatus: "PAID",
+      paymentReference: null,
+      subtotal: "500.00",
+      discountAmount: "0.00",
+      totalAmount: "500.00",
+      totalCost: "300.00",
+      grossProfit: "200.00",
+      soldAt: "2026-09-15T10:00:00.000Z",
+      createdAt: "2026-09-15T10:00:00.000Z",
+      updatedAt: "2026-09-15T10:00:00.000Z",
+      items: [],
+    };
+    const requests: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push([input, init]);
+        return jsonResponse({ success: true, data: sale });
+      },
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: new MemoryTokenStorage(),
+      fetchImpl,
+    });
+
+    await client.listSales({
+      status: "COMPLETED",
+      paymentStatus: "PAID",
+      limit: 10,
+    });
+    await client.getSale("sale_1");
+    await client.createSale({
+      paymentMethod: "CASH",
+      paymentStatus: "PAID",
+      discountAmount: 0,
+      items: [{ productId: "product_1", quantity: 2 }],
+    });
+
+    expect(requests[0]?.[0]).toBe(
+      "https://api.test/api/v1/sales?status=COMPLETED&paymentStatus=PAID&limit=10",
+    );
+    expect(requests[1]?.[0]).toBe("https://api.test/api/v1/sales/sale_1");
+    expect(requests[2]?.[0]).toBe("https://api.test/api/v1/sales");
+    expect(requests[2]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

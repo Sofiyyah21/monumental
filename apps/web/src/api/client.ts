@@ -5,6 +5,7 @@ import type {
   ApiEnvelope,
   AuthResponse,
   BestSellersReport,
+  CreateSaleInput,
   InventoryFilters,
   InventoryItem,
   InventoryMutationResult,
@@ -15,6 +16,7 @@ import type {
   ProductUpdateInput,
   ReportPeriod,
   Sale,
+  SaleFilters,
   SalesSummaryReport,
   StockAdjustmentInput,
   StockDamageInput,
@@ -165,11 +167,10 @@ export class ApiClient {
     to?: string;
     limit?: number;
   }) {
-    const query = toQueryString({
+    return this.listSales({
       ...filters,
       status: "COMPLETED",
     });
-    return this.request<Sale[]>(`/sales${query ? `?${query}` : ""}`);
   }
 
   async listProducts(filters: ProductFilters = {}) {
@@ -242,6 +243,22 @@ export class ApiClient {
 
   async recordDamage(input: StockDamageInput) {
     return this.request<InventoryMutationResult>("/inventory/damage", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listSales(filters: SaleFilters = {}) {
+    const query = toQueryString(filters);
+    return this.request<Sale[]>(`/sales${query ? `?${query}` : ""}`);
+  }
+
+  async getSale(id: string) {
+    return this.request<Sale>(`/sales/${id}`);
+  }
+
+  async createSale(input: CreateSaleInput) {
+    return this.request<Sale>("/sales", {
       method: "POST",
       body: JSON.stringify(input),
     });

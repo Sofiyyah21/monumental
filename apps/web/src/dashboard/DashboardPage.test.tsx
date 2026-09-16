@@ -51,6 +51,8 @@ function dashboardState(
           status: "COMPLETED",
           paymentMethod: "CASH",
           paymentStatus: "PAID",
+          subtotal: "1250.00",
+          discountAmount: "50.00",
           totalAmount: "1200.00",
           grossProfit: "500.00",
           soldAt: "2026-09-15T10:00:00.000Z",

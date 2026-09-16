@@ -49,6 +49,7 @@ describe("route authorization", () => {
     expect(canAccessRoute(manager, routes.admin)).toBe(false);
     expect(hasPermission(manager, permissions.MANAGE_PRODUCTS)).toBe(true);
     expect(hasPermission(manager, permissions.MANAGE_INVENTORY)).toBe(true);
+    expect(hasPermission(manager, permissions.CREATE_SALES)).toBe(true);
   });
 
   it("shows staff operational areas only", () => {
@@ -64,6 +65,7 @@ describe("route authorization", () => {
     expect(hasPermission(staff, permissions.MANAGE_PRODUCTS)).toBe(false);
     expect(hasPermission(staff, permissions.READ_INVENTORY)).toBe(true);
     expect(hasPermission(staff, permissions.MANAGE_INVENTORY)).toBe(false);
+    expect(hasPermission(staff, permissions.CREATE_SALES)).toBe(true);
   });
 
   it("keeps customers in the customer-facing area", () => {
@@ -75,6 +77,7 @@ describe("route authorization", () => {
     expect(labels).toEqual(["Customer"]);
     expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
+    expect(canAccessRoute(customer, routes.sales)).toBe(false);
     expect(canAccessRoute(customer, routes.reports)).toBe(false);
     expect(canAccessRoute(customer, routes.admin)).toBe(false);
     expect(getDefaultRouteForUser(customer)).toBe("/customer");
