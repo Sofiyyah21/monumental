@@ -30,7 +30,6 @@ export type CurrentUser = {
 export type AuthResponse = {
   user: CurrentUser;
   accessToken: string;
-  refreshToken: string;
 };
 
 export type ReportPeriod = "today" | "week" | "month" | "year";

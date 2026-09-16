@@ -21,9 +21,7 @@ export function AuthProvider({
   children: ReactNode;
   client?: ApiClient;
 }) {
-  const [status, setStatus] = useState<AuthStatus>(() =>
-    client.getStoredTokens() ? "loading" : "unauthenticated",
-  );
+  const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,24 +39,21 @@ export function AuthProvider({
   const refreshUser = useCallback(async () => {
     setStatus("loading");
     try {
-      const currentUser = await client.getCurrentUser();
-      setAuthenticatedUser(currentUser);
-    } catch {
-      try {
-        const auth = await client.refreshSession();
-        setAuthenticatedUser(auth.user);
-      } catch {
-        client.clearSession();
-        clearAuthState();
+      if (client.getStoredTokens()) {
+        const currentUser = await client.getCurrentUser();
+        setAuthenticatedUser(currentUser);
+        return;
       }
+
+      const auth = await client.refreshSession();
+      setAuthenticatedUser(auth.user);
+    } catch {
+      client.clearSession();
+      clearAuthState();
     }
   }, [clearAuthState, client, setAuthenticatedUser]);
 
   useEffect(() => {
-    if (!client.getStoredTokens()) {
-      return;
-    }
-
     const timeoutId = window.setTimeout(() => {
       void refreshUser();
     }, 0);

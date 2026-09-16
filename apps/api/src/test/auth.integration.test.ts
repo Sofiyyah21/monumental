@@ -65,6 +65,18 @@ async function login(app: ReturnType<typeof createApp>, email: string) {
     .expect(200);
 }
 
+function getRefreshCookie(response: request.Response) {
+  const cookies = response.headers["set-cookie"];
+  const cookieList = Array.isArray(cookies)
+    ? cookies
+    : [cookies].filter(Boolean);
+  const refreshCookie = cookieList.find((cookie) =>
+    cookie.startsWith("md_refresh_token="),
+  );
+  expect(refreshCookie).toEqual(expect.any(String));
+  return refreshCookie!;
+}
+
 describeDatabase("database-backed authentication integration", () => {
   const app = createApp(prisma);
 
@@ -155,6 +167,8 @@ describeDatabase("database-backed authentication integration", () => {
   it("logs in, creates a refresh token, and authenticates access tokens against the database", async () => {
     const user = await createUser(UserRole.STAFF, uniqueEmail("login"));
     const loginResponse = await login(app, user.email);
+    expect(loginResponse.body.data.refreshToken).toBeUndefined();
+    expect(getRefreshCookie(loginResponse)).toContain("HttpOnly");
 
     const refreshTokenCount = await prisma.refreshToken.count({
       where: { userId: user.id, revokedAt: null },
@@ -176,16 +190,16 @@ describeDatabase("database-backed authentication integration", () => {
   it("rotates refresh tokens and rejects revoked refresh tokens", async () => {
     const user = await createUser(UserRole.STAFF, uniqueEmail("rotate"));
     const loginResponse = await login(app, user.email);
-    const originalRefreshToken = loginResponse.body.data.refreshToken as string;
+    const originalRefreshCookie = getRefreshCookie(loginResponse);
 
     const refreshResponse = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: originalRefreshToken })
+      .set("Cookie", originalRefreshCookie)
       .expect(200);
 
-    expect(refreshResponse.body.data.refreshToken).not.toBe(
-      originalRefreshToken,
-    );
+    expect(refreshResponse.body.data.refreshToken).toBeUndefined();
+    const rotatedRefreshCookie = getRefreshCookie(refreshResponse);
+    expect(rotatedRefreshCookie).not.toBe(originalRefreshCookie);
 
     const revokedCount = await prisma.refreshToken.count({
       where: { userId: user.id, revokedAt: { not: null } },
@@ -198,21 +212,31 @@ describeDatabase("database-backed authentication integration", () => {
 
     const rejectedResponse = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: originalRefreshToken })
+      .set("Cookie", originalRefreshCookie)
       .expect(401);
 
     expect(rejectedResponse.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+
+    await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "body-token-is-ignored" })
+      .expect(401);
   });
 
   it("revokes refresh tokens on logout and rejects reuse", async () => {
     const user = await createUser(UserRole.STAFF, uniqueEmail("logout"));
     const loginResponse = await login(app, user.email);
-    const refreshToken = loginResponse.body.data.refreshToken as string;
+    const refreshCookie = getRefreshCookie(loginResponse);
 
     await request(app)
       .post("/api/v1/auth/logout")
-      .send({ refreshToken })
-      .expect(204);
+      .set("Cookie", refreshCookie)
+      .expect(204)
+      .expect((response) => {
+        expect(getRefreshCookie(response)).toContain(
+          "Expires=Thu, 01 Jan 1970",
+        );
+      });
 
     await expect(
       prisma.refreshToken.count({
@@ -222,7 +246,7 @@ describeDatabase("database-backed authentication integration", () => {
 
     const response = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken })
+      .set("Cookie", refreshCookie)
       .expect(401);
     expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
   });
@@ -233,7 +257,7 @@ describeDatabase("database-backed authentication integration", () => {
       uniqueEmail("expired-refresh"),
     );
     const loginResponse = await login(app, user.email);
-    const refreshToken = loginResponse.body.data.refreshToken as string;
+    const refreshCookie = getRefreshCookie(loginResponse);
 
     await prisma.refreshToken.updateMany({
       where: { userId: user.id },
@@ -242,8 +266,29 @@ describeDatabase("database-backed authentication integration", () => {
 
     const response = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken })
+      .set("Cookie", refreshCookie)
       .expect(401);
+    expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+
+  it("blocks inactive users from refresh-cookie authentication", async () => {
+    const user = await createUser(
+      UserRole.STAFF,
+      uniqueEmail("inactive-refresh"),
+    );
+    const loginResponse = await login(app, user.email);
+    const refreshCookie = getRefreshCookie(loginResponse);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { active: false },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie)
+      .expect(401);
+
     expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
   });
 

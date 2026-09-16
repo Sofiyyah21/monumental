@@ -13,7 +13,7 @@ export function createApp(db: DatabaseClient = prisma) {
   const app = express();
   const env = getEnv();
 
-  app.use(cors({ origin: env.CORS_ORIGIN }));
+  app.use(cors({ credentials: true, origin: env.CORS_ORIGIN }));
   app.use(express.json());
 
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));

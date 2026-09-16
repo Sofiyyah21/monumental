@@ -22,6 +22,13 @@ export const openApiDocument = {
         scheme: "bearer",
         bearerFormat: "JWT",
       },
+      refreshCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "md_refresh_token",
+        description:
+          "HttpOnly refresh-token cookie set by /auth/login and rotated by /auth/refresh.",
+      },
     },
     schemas: {
       ProductCategory: {
@@ -433,7 +440,9 @@ export const openApiDocument = {
     "/auth/login": {
       post: {
         tags: ["Auth"],
-        summary: "Log in and receive access and refresh tokens",
+        summary: "Log in, receive an access token, and set the refresh cookie",
+        description:
+          "Returns the access token in JSON and sets the refresh token as an HttpOnly cookie. Browser clients must not store refresh tokens in JavaScript-accessible storage.",
         requestBody: {
           required: true,
           content: {
@@ -458,19 +467,28 @@ export const openApiDocument = {
     "/auth/refresh": {
       post: {
         tags: ["Auth"],
-        summary: "Rotate a refresh token and issue a new access token",
+        security: [{ refreshCookie: [] }],
+        summary:
+          "Rotate the HttpOnly refresh cookie and issue a new access token",
+        description:
+          "Reads the refresh token from the HttpOnly cookie. A JSON refreshToken body is not accepted for browser authentication.",
         responses: {
           "200": { description: "Token refreshed" },
           "401": { description: "Invalid refresh token" },
+          "403": { description: "Untrusted cookie request origin" },
         },
       },
     },
     "/auth/logout": {
       post: {
         tags: ["Auth"],
-        summary: "Revoke a refresh token",
+        security: [{ refreshCookie: [] }],
+        summary: "Revoke the refresh token and clear the refresh cookie",
+        description:
+          "Revokes the refresh token from the HttpOnly cookie when present, clears the cookie, and returns 204. Safe to call when no refresh cookie is present.",
         responses: {
           "204": { description: "Logged out" },
+          "403": { description: "Untrusted cookie request origin" },
         },
       },
     },

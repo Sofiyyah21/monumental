@@ -3,6 +3,11 @@ import { z } from "zod";
 
 dotenv.config({ quiet: true });
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(1).optional(),
+);
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -19,6 +24,16 @@ const envSchema = z.object({
     .min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   ACCESS_TOKEN_EXPIRES_IN: z.string().default("15m"),
   REFRESH_TOKEN_EXPIRES_IN_DAYS: z.coerce.number().int().positive().default(30),
+  REFRESH_TOKEN_COOKIE_NAME: z.string().min(1).default("md_refresh_token"),
+  REFRESH_TOKEN_COOKIE_PATH: z.string().min(1).default("/api/v1/auth"),
+  REFRESH_TOKEN_COOKIE_DOMAIN: optionalNonEmptyString,
+  REFRESH_TOKEN_COOKIE_SECURE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(["true", "false"]).optional(),
+  ),
+  REFRESH_TOKEN_COOKIE_SAME_SITE: z
+    .enum(["lax", "strict", "none"])
+    .default("lax"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   BUSINESS_TIMEZONE: z.string().default("Africa/Lagos"),
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),

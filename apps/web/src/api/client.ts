@@ -54,6 +54,7 @@ export class ApiClient {
   private readonly tokenStorage: TokenStorage;
   private readonly fetchImpl: typeof fetch;
   private accessToken: string | null = null;
+  private refreshPromise: Promise<AuthResponse> | null = null;
 
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? config.apiBaseUrl).replace(/\/$/, "");
@@ -70,7 +71,6 @@ export class ApiClient {
     this.accessToken = auth.accessToken;
     this.tokenStorage.write({
       accessToken: auth.accessToken,
-      refreshToken: auth.refreshToken,
     });
   }
 
@@ -90,17 +90,11 @@ export class ApiClient {
   }
 
   async logout() {
-    const refreshToken = this.tokenStorage.read()?.refreshToken;
     this.clearSession();
-
-    if (!refreshToken) {
-      return;
-    }
 
     try {
       await this.request<void>("/auth/logout", {
         method: "POST",
-        body: JSON.stringify({ refreshToken }),
         retryOnUnauthorized: false,
       });
     } catch {
@@ -109,18 +103,23 @@ export class ApiClient {
   }
 
   async refreshSession() {
-    const refreshToken = this.tokenStorage.read()?.refreshToken;
-    if (!refreshToken) {
-      throw new ApiError("No refresh token is available", 401, "AUTH_REQUIRED");
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
 
-    const auth = await this.request<AuthResponse>("/auth/refresh", {
+    this.refreshPromise = this.request<AuthResponse>("/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({ refreshToken }),
       retryOnUnauthorized: false,
-    });
-    this.setSession(auth);
-    return auth;
+    })
+      .then((auth) => {
+        this.setSession(auth);
+        return auth;
+      })
+      .finally(() => {
+        this.refreshPromise = null;
+      });
+
+    return this.refreshPromise;
   }
 
   async getCurrentUser() {
@@ -306,6 +305,7 @@ export class ApiClient {
 
     return this.fetchImpl(`${this.baseUrl}${path}`, {
       ...options,
+      credentials: options.credentials ?? "include",
       headers,
     });
   }

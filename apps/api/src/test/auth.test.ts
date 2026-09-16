@@ -41,6 +41,26 @@ async function login(
     .expect(expectedStatus);
 }
 
+function getRefreshCookie(response: request.Response) {
+  const cookies = response.headers["set-cookie"];
+  const cookieList = Array.isArray(cookies)
+    ? cookies
+    : [cookies].filter(Boolean);
+  const refreshCookie = cookieList.find((cookie) =>
+    cookie.startsWith("md_refresh_token="),
+  );
+  expect(refreshCookie).toEqual(expect.any(String));
+  return refreshCookie!;
+}
+
+function expectRefreshCookieAttributes(response: request.Response) {
+  const refreshCookie = getRefreshCookie(response);
+  expect(refreshCookie).toContain("HttpOnly");
+  expect(refreshCookie).toContain("Path=/api/v1/auth");
+  expect(refreshCookie).toContain("SameSite=Lax");
+  expect(refreshCookie).not.toContain("Secure");
+}
+
 describe("authentication and authorization", () => {
   it("registers a customer without returning password fields", async () => {
     const { db } = createFakeDatabase();
@@ -75,7 +95,7 @@ describe("authentication and authorization", () => {
     expect(response.body.error.code).toBe("USER_EXISTS");
   });
 
-  it("logs in with valid credentials and never returns password fields", async () => {
+  it("logs in with valid credentials, sets a refresh cookie, and never returns password or refresh-token fields", async () => {
     const { fake, app, user } = await createUserThroughDatabase(
       UserRole.STAFF,
       "staff-login@example.com",
@@ -90,8 +110,9 @@ describe("authentication and authorization", () => {
       role: UserRole.STAFF,
     });
     expect(response.body.data.accessToken).toEqual(expect.any(String));
-    expect(response.body.data.refreshToken).toEqual(expect.any(String));
+    expect(response.body.data.refreshToken).toBeUndefined();
     expect(JSON.stringify(response.body)).not.toContain("passwordHash");
+    expectRefreshCookieAttributes(response);
   });
 
   it("rejects an invalid password", async () => {
@@ -179,18 +200,32 @@ describe("authentication and authorization", () => {
       "refresh@example.com",
     );
     const loginResponse = await login(app, user.email);
+    const refreshCookie = getRefreshCookie(loginResponse);
 
     const response = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: loginResponse.body.data.refreshToken })
+      .set("Cookie", refreshCookie)
       .expect(200);
 
     expect(response.body.data.user.id).toBe(user.id);
     expect(response.body.data.accessToken).toEqual(expect.any(String));
-    expect(response.body.data.refreshToken).toEqual(expect.any(String));
-    expect(response.body.data.refreshToken).not.toBe(
-      loginResponse.body.data.refreshToken,
+    expect(response.body.data.refreshToken).toBeUndefined();
+    expect(getRefreshCookie(response)).not.toBe(refreshCookie);
+  });
+
+  it("rejects refresh requests without the HttpOnly cookie even when a JSON body is provided", async () => {
+    const { app, user } = await createUserThroughDatabase(
+      UserRole.STAFF,
+      "refresh-body@example.com",
     );
+    await login(app, user.email);
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "client-readable-token-is-not-accepted" })
+      .expect(401);
+
+    expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
   });
 
   it("rotates refresh tokens and blocks reuse of the previous token", async () => {
@@ -199,20 +234,21 @@ describe("authentication and authorization", () => {
       "rotate@example.com",
     );
     const loginResponse = await login(app, user.email);
-    const firstRefreshToken = loginResponse.body.data.refreshToken;
+    const firstRefreshCookie = getRefreshCookie(loginResponse);
 
     const refreshResponse = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: firstRefreshToken })
+      .set("Cookie", firstRefreshCookie)
       .expect(200);
+    const secondRefreshCookie = getRefreshCookie(refreshResponse);
 
     await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: firstRefreshToken })
+      .set("Cookie", firstRefreshCookie)
       .expect(401);
     await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: refreshResponse.body.data.refreshToken })
+      .set("Cookie", secondRefreshCookie)
       .expect(200);
   });
 
@@ -222,18 +258,35 @@ describe("authentication and authorization", () => {
       "logout@example.com",
     );
     const loginResponse = await login(app, user.email);
-    const refreshToken = loginResponse.body.data.refreshToken;
+    const refreshCookie = getRefreshCookie(loginResponse);
 
     await request(app)
       .post("/api/v1/auth/logout")
-      .send({ refreshToken })
-      .expect(204);
+      .set("Cookie", refreshCookie)
+      .expect(204)
+      .expect((response) => {
+        const clearedCookie = getRefreshCookie(response);
+        expect(clearedCookie).toContain("Expires=Thu, 01 Jan 1970");
+      });
     const response = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken })
+      .set("Cookie", refreshCookie)
       .expect(401);
 
     expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+
+  it("clears the refresh cookie during logout even if no cookie is present", async () => {
+    const { db } = createFakeDatabase();
+    const app = createApp(db);
+
+    await request(app)
+      .post("/api/v1/auth/logout")
+      .expect(204)
+      .expect((response) => {
+        const clearedCookie = getRefreshCookie(response);
+        expect(clearedCookie).toContain("Expires=Thu, 01 Jan 1970");
+      });
   });
 
   it("rejects expired refresh tokens", async () => {
@@ -242,7 +295,7 @@ describe("authentication and authorization", () => {
       "expired-refresh@example.com",
     );
     const loginResponse = await login(app, user.email);
-    const refreshToken = loginResponse.body.data.refreshToken as string;
+    const refreshCookie = getRefreshCookie(loginResponse);
 
     for (const storedRefreshToken of fake.refreshTokens.values()) {
       storedRefreshToken.expiresAt = new Date(Date.now() - 1000);
@@ -250,10 +303,27 @@ describe("authentication and authorization", () => {
 
     const response = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken })
+      .set("Cookie", refreshCookie)
       .expect(401);
 
     expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+
+  it("rejects invalid refresh cookies and untrusted cookie origins", async () => {
+    const { db } = createFakeDatabase();
+    const app = createApp(db);
+
+    await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", "md_refresh_token=invalid")
+      .expect(401);
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Origin", "https://evil.example")
+      .set("Cookie", "md_refresh_token=invalid")
+      .expect(403);
+    expect(response.body.error.code).toBe("CSRF_ORIGIN_INVALID");
   });
 
   it("allows admin-only user management for admins", async () => {

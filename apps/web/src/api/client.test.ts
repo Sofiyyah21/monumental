@@ -13,7 +13,6 @@ const user = {
 const authResponse: AuthResponse = {
   user,
   accessToken: "access-token",
-  refreshToken: "refresh-token",
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -24,7 +23,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("ApiClient", () => {
-  it("logs in and stores access and refresh tokens in the configured storage", async () => {
+  it("logs in and stores only the access token in the configured storage", async () => {
     const storage = new MemoryTokenStorage();
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ success: true, data: authResponse }),
@@ -40,7 +39,6 @@ describe("ApiClient", () => {
     expect(result.user.role).toBe("ADMIN");
     expect(storage.read()).toEqual({
       accessToken: "access-token",
-      refreshToken: "refresh-token",
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       "https://api.test/api/v1/auth/login",
@@ -76,7 +74,6 @@ describe("ApiClient", () => {
     const storage = new MemoryTokenStorage();
     storage.write({
       accessToken: "expired-access",
-      refreshToken: "old-refresh",
     });
     const fetchImpl = vi
       .fn()
@@ -95,7 +92,6 @@ describe("ApiClient", () => {
           data: {
             ...authResponse,
             accessToken: "new-access",
-            refreshToken: "new-refresh",
           },
         }),
       )
@@ -111,28 +107,93 @@ describe("ApiClient", () => {
     expect(currentUser).toEqual(user);
     expect(storage.read()).toEqual({
       accessToken: "new-access",
-      refreshToken: "new-refresh",
     });
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe("/api/v1/auth/refresh");
+    expect(fetchImpl.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        credentials: "include",
+        method: "POST",
+      }),
+    );
+    expect(fetchImpl.mock.calls[1]?.[1]).not.toHaveProperty("body");
     const retryHeaders = fetchImpl.mock.calls[2]?.[1]?.headers as Headers;
     expect(retryHeaders.get("Authorization")).toBe("Bearer new-access");
   });
 
-  it("revokes the stored refresh token on logout and clears the session", async () => {
+  it("uses a single in-flight refresh request for simultaneous refreshes", async () => {
     const storage = new MemoryTokenStorage();
-    storage.write({ accessToken: "access", refreshToken: "refresh" });
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetchImpl = vi.fn(
+      async () =>
+        new Promise<Response>((resolve) => {
+          setTimeout(() => {
+            resolve(jsonResponse({ success: true, data: authResponse }));
+          }, 0);
+        }),
+    );
+    const client = new ApiClient({ tokenStorage: storage, fetchImpl });
+
+    const [first, second] = await Promise.all([
+      client.refreshSession(),
+      client.refreshSession(),
+    ]);
+
+    expect(first).toEqual(authResponse);
+    expect(second).toEqual(authResponse);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(storage.read()).toEqual({ accessToken: "access-token" });
+  });
+
+  it("clears session after a failed refresh retry", async () => {
+    const storage = new MemoryTokenStorage();
+    storage.write({ accessToken: "expired-access" });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            success: false,
+            error: { code: "INVALID_ACCESS_TOKEN", message: "Expired" },
+          },
+          401,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            success: false,
+            error: { code: "INVALID_REFRESH_TOKEN", message: "Invalid" },
+          },
+          401,
+        ),
+      );
+    const client = new ApiClient({ tokenStorage: storage, fetchImpl });
+
+    await expect(client.getCurrentUser()).rejects.toBeInstanceOf(ApiError);
+
+    expect(storage.read()).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("revokes the refresh cookie on logout and clears the frontend session", async () => {
+    const storage = new MemoryTokenStorage();
+    storage.write({ accessToken: "access" });
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response(null, { status: 204 }),
+    );
     const client = new ApiClient({ tokenStorage: storage, fetchImpl });
 
     await client.logout();
 
+    const logoutInit = fetchImpl.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(storage.read()).toBeNull();
     expect(fetchImpl).toHaveBeenCalledWith(
       "/api/v1/auth/logout",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ refreshToken: "refresh" }),
+        credentials: "include",
       }),
     );
+    expect(logoutInit).not.toHaveProperty("body");
   });
 
   it("requests reporting period summaries and supporting dashboard data", async () => {

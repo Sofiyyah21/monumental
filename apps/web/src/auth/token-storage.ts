@@ -1,6 +1,5 @@
 export type StoredTokens = {
   accessToken: string;
-  refreshToken: string;
 };
 
 export interface TokenStorage {
@@ -10,7 +9,6 @@ export interface TokenStorage {
 }
 
 const accessTokenKey = "monumental.accessToken";
-const refreshTokenKey = "monumental.refreshToken";
 
 export class SessionTokenStorage implements TokenStorage {
   read() {
@@ -19,13 +17,12 @@ export class SessionTokenStorage implements TokenStorage {
     }
 
     const accessToken = window.sessionStorage.getItem(accessTokenKey);
-    const refreshToken = window.sessionStorage.getItem(refreshTokenKey);
 
-    if (!accessToken || !refreshToken) {
+    if (!accessToken) {
       return null;
     }
 
-    return { accessToken, refreshToken };
+    return { accessToken };
   }
 
   write(tokens: StoredTokens) {
@@ -34,7 +31,6 @@ export class SessionTokenStorage implements TokenStorage {
     }
 
     window.sessionStorage.setItem(accessTokenKey, tokens.accessToken);
-    window.sessionStorage.setItem(refreshTokenKey, tokens.refreshToken);
   }
 
   clear() {
@@ -43,7 +39,6 @@ export class SessionTokenStorage implements TokenStorage {
     }
 
     window.sessionStorage.removeItem(accessTokenKey);
-    window.sessionStorage.removeItem(refreshTokenKey);
   }
 }
 

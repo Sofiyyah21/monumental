@@ -8,7 +8,6 @@ import { AuthController } from "../controllers/auth.controller.js";
 import {
   createUserSchema,
   loginSchema,
-  refreshTokenSchema,
   registerCustomerSchema,
 } from "../validation/auth.schema.js";
 
@@ -28,16 +27,8 @@ export function createAuthRoutes(
     validate({ body: loginSchema }),
     asyncHandler(controller.login),
   );
-  router.post(
-    "/refresh",
-    validate({ body: refreshTokenSchema }),
-    asyncHandler(controller.refresh),
-  );
-  router.post(
-    "/logout",
-    validate({ body: refreshTokenSchema }),
-    asyncHandler(controller.logout),
-  );
+  router.post("/refresh", asyncHandler(controller.refresh));
+  router.post("/logout", asyncHandler(controller.logout));
   router.get("/me", authenticateRequest, asyncHandler(controller.me));
   router.post(
     "/users",
