@@ -3,9 +3,12 @@ import type { AppRoute } from "../routing/routes";
 import {
   getDefaultRouteForUser,
   getVisibleNavigation,
+  routes,
 } from "../routing/routes";
 import { navigate } from "../routing/useBrowserRoute";
 import { useAuth } from "../auth/useAuth";
+import { useCustomerCart } from "../customer/useCustomerCart";
+import { formatCustomerCartNavLabel } from "../customer/cart-utils";
 import { Logo } from "./Logo";
 
 export function AppShell({
@@ -16,6 +19,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const auth = useAuth();
+  const cart = useCustomerCart();
   const navigation = getVisibleNavigation(auth.user);
 
   return (
@@ -43,7 +47,9 @@ export function AppShell({
                 route.path === activeRoute.path ? "page" : undefined
               }
             >
-              {route.navLabel}
+              {route.path === routes.cart.path
+                ? formatCustomerCartNavLabel(cart.summary.totalQuantity)
+                : route.navLabel}
             </button>
           ))}
         </nav>

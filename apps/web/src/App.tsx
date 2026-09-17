@@ -3,6 +3,8 @@ import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/Feedback";
+import { CartPage } from "./customer/CartPage";
+import { CustomerCartProvider } from "./customer/CartContext";
 import { ShopPage } from "./customer/ShopPage";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { InventoryPage } from "./inventory/InventoryPage";
@@ -149,6 +151,14 @@ function AppRoutes() {
     );
   }
 
+  if (activeRoute.path === routes.cart.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <CartPage />
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell activeRoute={activeRoute}>
       <FoundationPage route={activeRoute} />
@@ -159,7 +169,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <CustomerCartProvider>
+        <AppRoutes />
+      </CustomerCartProvider>
     </AuthProvider>
   );
 }

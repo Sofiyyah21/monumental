@@ -39,9 +39,11 @@ function renderShop(
 ) {
   return renderToStaticMarkup(
     <ShopCatalogView
+      cartMessage={null}
       error={overrides.error ?? null}
       filters={overrides.filters ?? defaultShopFilters}
       loading={overrides.loading ?? false}
+      onAddToCart={vi.fn()}
       onFilterChange={vi.fn()}
       products={overrides.products ?? products}
     />,
@@ -61,6 +63,8 @@ describe("ShopCatalogView", () => {
     expect(html).toContain("Available");
     expect(html).toContain("Vegetable Oil");
     expect(html).toContain("Out of stock");
+    expect(html).toContain("Add Monumental Drinks Pack to cart");
+    expect(html).toContain("Vegetable Oil is out of stock");
   });
 
   it("does not expose internal management fields to customers", () => {

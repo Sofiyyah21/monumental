@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CurrentUser, UserRole } from "../api/types";
 import { hasPermission, permissions } from "../auth/permissions";
+import { formatCustomerCartNavLabel } from "../customer/cart-utils";
 import {
   canAccessRoute,
   findRoute,
@@ -82,8 +83,9 @@ describe("route authorization", () => {
       (route) => route.navLabel,
     );
 
-    expect(labels).toEqual(["Shop"]);
+    expect(labels).toEqual(["Shop", "Cart"]);
     expect(canAccessRoute(customer, routes.shop)).toBe(true);
+    expect(canAccessRoute(customer, routes.cart)).toBe(true);
     expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.sales)).toBe(false);
@@ -98,7 +100,16 @@ describe("route authorization", () => {
     expect(canAccessRoute(user("ADMIN"), routes.shop)).toBe(false);
     expect(canAccessRoute(user("MANAGER"), routes.shop)).toBe(false);
     expect(canAccessRoute(user("STAFF"), routes.shop)).toBe(false);
+    expect(canAccessRoute(user("ADMIN"), routes.cart)).toBe(false);
+    expect(canAccessRoute(user("MANAGER"), routes.cart)).toBe(false);
+    expect(canAccessRoute(user("STAFF"), routes.cart)).toBe(false);
     expect(canAccessRoute(user("CUSTOMER"), routes.customer)).toBe(true);
+  });
+
+  it("labels customer cart navigation by total quantity", () => {
+    expect(formatCustomerCartNavLabel(0)).toBe("Cart");
+    expect(formatCustomerCartNavLabel(1)).toBe("Cart (1 item)");
+    expect(formatCustomerCartNavLabel(3)).toBe("Cart (3 items)");
   });
 
   it("chooses role-appropriate landing routes", () => {

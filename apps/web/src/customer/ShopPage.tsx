@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   CustomerCatalogProduct,
   ProductCategory,
@@ -12,6 +13,7 @@ import {
   productUnits,
 } from "../products/product-utils";
 import { type ShopProductFilters, useShopProducts } from "./useShopProducts";
+import { useCustomerCart } from "./useCustomerCart";
 
 const availabilityLabels = {
   AVAILABLE: "Available",
@@ -20,12 +22,19 @@ const availabilityLabels = {
 
 export function ShopPage() {
   const { error, filters, loading, products, setFilters } = useShopProducts();
+  const cart = useCustomerCart();
+  const [cartMessage, setCartMessage] = useState<string | null>(null);
 
   return (
     <ShopCatalogView
+      cartMessage={cartMessage}
       error={error}
       filters={filters}
       loading={loading}
+      onAddToCart={(product) => {
+        cart.addProduct(product);
+        setCartMessage(`${product.name} added to cart.`);
+      }}
       onFilterChange={setFilters}
       products={products}
     />
@@ -33,15 +42,19 @@ export function ShopPage() {
 }
 
 export function ShopCatalogView({
+  cartMessage,
   error,
   filters,
   loading,
+  onAddToCart,
   onFilterChange,
   products,
 }: {
+  cartMessage?: string | null;
   error: string | null;
   filters: ShopProductFilters;
   loading: boolean;
+  onAddToCart(product: CustomerCatalogProduct): void;
   onFilterChange(filters: ShopProductFilters): void;
   products: CustomerCatalogProduct[];
 }) {
@@ -66,6 +79,12 @@ export function ShopCatalogView({
           </span>
         </div>
       </section>
+
+      {cartMessage ? (
+        <Alert title="Cart updated" variant="info">
+          {cartMessage}
+        </Alert>
+      ) : null}
 
       <section className="panel shop-filters" aria-label="Shop catalog filters">
         <label>
@@ -134,7 +153,7 @@ export function ShopCatalogView({
             <p>Try a different search, category, or unit filter.</p>
           </EmptyState>
         ) : (
-          <ProductCatalogGrid products={products} />
+          <ProductCatalogGrid onAddToCart={onAddToCart} products={products} />
         )}
       </section>
     </div>
@@ -142,8 +161,10 @@ export function ShopCatalogView({
 }
 
 function ProductCatalogGrid({
+  onAddToCart,
   products,
 }: {
+  onAddToCart(product: CustomerCatalogProduct): void;
   products: CustomerCatalogProduct[];
 }) {
   return (
@@ -179,6 +200,16 @@ function ProductCatalogGrid({
             <span>Selling price</span>
             <strong>{formatMoney(product.sellingPrice)}</strong>
           </div>
+          <button
+            className="button button--primary shop-add-button"
+            disabled={product.availability !== "AVAILABLE"}
+            onClick={() => onAddToCart(product)}
+            type="button"
+          >
+            {product.availability === "AVAILABLE"
+              ? `Add ${product.name} to cart`
+              : `${product.name} is out of stock`}
+          </button>
         </article>
       ))}
     </div>

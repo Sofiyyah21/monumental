@@ -21,6 +21,7 @@ type RouteKey =
   | "saleDetail"
   | "reports"
   | "shop"
+  | "cart"
   | "customer"
   | "forbidden";
 
@@ -91,6 +92,14 @@ export const routes: Record<RouteKey, AppRoute> = {
     title: "Shop",
     description: "Customer-facing Monumental Details catalog.",
     navLabel: "Shop",
+    requiresAuth: true,
+    roles: ["CUSTOMER"],
+  },
+  cart: {
+    path: "/cart",
+    title: "Cart",
+    description: "Customer cart review.",
+    navLabel: "Cart",
     requiresAuth: true,
     roles: ["CUSTOMER"],
   },

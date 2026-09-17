@@ -1544,6 +1544,106 @@
   font-size: 1.25rem;
 }
 
+.shop-add-button {
+  width: 100%;
+}
+
+.cart-grid {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.cart-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, auto);
+}
+
+.cart-layout {
+  align-items: start;
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 24rem);
+}
+
+.cart-lines-panel {
+  min-width: 0;
+}
+
+.customer-cart-summary {
+  position: sticky;
+  top: var(--space-5);
+}
+
+.customer-cart-lines {
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.customer-cart-lines li {
+  border-bottom: 1px solid var(--color-border);
+  display: grid;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
+.customer-cart-product strong {
+  color: var(--color-text);
+  display: block;
+}
+
+.customer-cart-product span {
+  color: var(--color-muted);
+  display: block;
+  font-size: 0.88rem;
+}
+
+.customer-cart-controls {
+  align-items: end;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(7rem, 10rem) auto auto;
+}
+
+.customer-cart-controls label {
+  color: var(--color-muted);
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: var(--space-2);
+}
+
+.customer-cart-controls input {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  min-height: 2.65rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.customer-cart-line-total {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.customer-cart-line-total span,
+.cart-boundary-note {
+  color: var(--color-muted);
+}
+
+.customer-cart-line-total strong {
+  color: var(--color-brand-strong);
+}
+
+.cart-boundary-note {
+  border-top: 1px solid var(--color-border);
+  font-size: 0.9rem;
+  padding-top: var(--space-3);
+}
+
 @keyframes spin {
   to {
     transform: rotate(1turn);
@@ -1643,13 +1743,17 @@
   .sales-history-filters,
   .receipt-meta,
   .shop-hero,
-  .shop-filters {
+  .shop-filters,
+  .cart-hero,
+  .cart-layout,
+  .customer-cart-controls {
     grid-template-columns: 1fr;
   }
 
   .product-form-panel,
   .inventory-operation-panel,
-  .pos-cart-panel {
+  .pos-cart-panel,
+  .customer-cart-summary {
     position: static;
   }
 
@@ -1757,7 +1861,8 @@
   .sale-success,
   .receipt-header,
   .shop-product-main,
-  .shop-price-line {
+  .shop-price-line,
+  .customer-cart-line-total {
     align-items: start;
     flex-direction: column;
   }
