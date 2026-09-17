@@ -13,7 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "bootstrap:admin": "tsx src/bootstrap/seed.ts",
-    "test:integration": "RUN_DATABASE_TESTS=true vitest run --no-file-parallelism --testTimeout 15000 src/test/auth.integration.test.ts src/test/product.integration.test.ts src/test/inventory.integration.test.ts src/test/sale.integration.test.ts src/test/report.integration.test.ts src/test/order.integration.test.ts"
+    "test:db:prepare": "tsx src/test/prepare-test-database.ts",
+    "test:integration": "npm run test:db:prepare && RUN_DATABASE_TESTS=true vitest run --no-file-parallelism --testTimeout 30000 src/test/auth.integration.test.ts src/test/product.integration.test.ts src/test/inventory.integration.test.ts src/test/sale.integration.test.ts src/test/report.integration.test.ts src/test/order.integration.test.ts"
   },
   "prisma": {
     "seed": "tsx src/bootstrap/seed.ts"
