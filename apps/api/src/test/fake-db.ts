@@ -1,4 +1,6 @@
 import {
+  OrderPaymentStatus,
+  OrderStatus,
   PaymentMethod,
   PaymentStatus,
   Prisma,
@@ -119,6 +121,41 @@ type SaleItemWhere = {
   };
 };
 
+type OrderRecord = {
+  id: string;
+  reference: string;
+  customerId: string;
+  status: OrderStatus;
+  paymentStatus: OrderPaymentStatus;
+  subtotal: Prisma.Decimal;
+  cancelledAt: Date | null;
+  cancelReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type OrderItemRecord = {
+  id: string;
+  orderId: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  productCategory: ProductCategory;
+  productUnit: ProductUnit;
+  quantity: Prisma.Decimal;
+  unitPrice: Prisma.Decimal;
+  lineSubtotal: Prisma.Decimal;
+  createdAt: Date;
+};
+
+type OrderWhere = {
+  id?: string;
+  reference?: string;
+  customerId?: string;
+  status?: OrderStatus;
+  paymentStatus?: OrderPaymentStatus;
+};
+
 type StockMovementRecord = {
   id: string;
   productId: string;
@@ -182,6 +219,8 @@ export function createFakeDatabase() {
   const stockMovements = new Map<string, StockMovementRecord>();
   const sales = new Map<string, SaleRecord>();
   const saleItems = new Map<string, SaleItemRecord>();
+  const orders = new Map<string, OrderRecord>();
+  const orderItems = new Map<string, OrderItemRecord>();
   let userSequence = 1;
   let refreshTokenSequence = 1;
   let productSequence = 1;
@@ -189,6 +228,9 @@ export function createFakeDatabase() {
   let saleSequence = 1;
   let saleItemSequence = 1;
   let saleReferenceSequence = 1;
+  let orderSequence = 1;
+  let orderItemSequence = 1;
+  let orderReferenceSequence = 1;
 
   const findUser = (where: UserWhere) => {
     if (where.id) {
@@ -406,6 +448,40 @@ export function createFakeDatabase() {
     items: include?.items
       ? [...saleItems.values()]
           .filter((item) => item.saleId === sale.id)
+          .map((item) => ({ ...item }))
+      : undefined,
+  });
+
+  const matchesOrderWhere = (order: OrderRecord, where?: OrderWhere) => {
+    if (!where) {
+      return true;
+    }
+    if (where.id && order.id !== where.id) {
+      return false;
+    }
+    if (where.reference && order.reference !== where.reference) {
+      return false;
+    }
+    if (where.customerId && order.customerId !== where.customerId) {
+      return false;
+    }
+    if (where.status && order.status !== where.status) {
+      return false;
+    }
+    if (where.paymentStatus && order.paymentStatus !== where.paymentStatus) {
+      return false;
+    }
+    return true;
+  };
+
+  const includeOrderRelations = (
+    order: OrderRecord,
+    include?: { items?: boolean },
+  ) => ({
+    ...order,
+    items: include?.items
+      ? [...orderItems.values()]
+          .filter((item) => item.orderId === order.id)
           .map((item) => ({ ...item }))
       : undefined,
   });
@@ -973,7 +1049,147 @@ export function createFakeDatabase() {
         });
       },
     },
-    async $queryRaw() {
+    order: {
+      async findMany(options?: {
+        where?: OrderWhere;
+        include?: { items?: boolean };
+        take?: number;
+      }) {
+        return [...orders.values()]
+          .filter((order) => matchesOrderWhere(order, options?.where))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, options?.take)
+          .map((order) => includeOrderRelations(order, options?.include));
+      },
+      async findUnique(options: {
+        where: OrderWhere;
+        include?: { items?: boolean };
+      }) {
+        const order = [...orders.values()].find((candidate) =>
+          matchesOrderWhere(candidate, options.where),
+        );
+        return order ? includeOrderRelations(order, options.include) : null;
+      },
+      async create(options: {
+        data: {
+          reference: string;
+          customerId: string;
+          status: OrderStatus;
+          paymentStatus: OrderPaymentStatus;
+          subtotal: Prisma.Decimal;
+          createdAt?: Date;
+          items: {
+            create: Array<{
+              productId: string;
+              productName: string;
+              productSku: string;
+              productCategory: ProductCategory;
+              productUnit: ProductUnit;
+              quantity: Prisma.Decimal;
+              unitPrice: Prisma.Decimal;
+              lineSubtotal: Prisma.Decimal;
+              createdAt?: Date;
+            }>;
+          };
+        };
+        include?: { items?: boolean };
+      }) {
+        if (
+          [...orders.values()].some(
+            (order) => order.reference === options.data.reference,
+          )
+        ) {
+          throw uniqueConstraintError();
+        }
+
+        const now = new Date();
+        const order: OrderRecord = {
+          id: `order_${orderSequence}`,
+          reference: options.data.reference,
+          customerId: options.data.customerId,
+          status: options.data.status,
+          paymentStatus: options.data.paymentStatus,
+          subtotal: options.data.subtotal,
+          cancelledAt: null,
+          cancelReason: null,
+          createdAt: options.data.createdAt ?? now,
+          updatedAt: now,
+        };
+        orderSequence += 1;
+        orders.set(order.id, order);
+
+        for (const itemInput of options.data.items.create) {
+          const item: OrderItemRecord = {
+            id: `order_item_${orderItemSequence}`,
+            orderId: order.id,
+            ...itemInput,
+            createdAt: itemInput.createdAt ?? now,
+          };
+          orderItemSequence += 1;
+          orderItems.set(item.id, item);
+        }
+
+        return includeOrderRelations(order, options.include);
+      },
+      async update(options: {
+        where: OrderWhere;
+        data: Partial<{
+          status: OrderStatus;
+          paymentStatus: OrderPaymentStatus;
+          cancelledAt: Date;
+          cancelReason: string | null;
+        }>;
+        include?: { items?: boolean };
+      }) {
+        const order = [...orders.values()].find((candidate) =>
+          matchesOrderWhere(candidate, options.where),
+        );
+        if (!order) {
+          throw recordNotFoundError();
+        }
+
+        const updatedOrder: OrderRecord = {
+          ...order,
+          status: options.data.status ?? order.status,
+          paymentStatus: options.data.paymentStatus ?? order.paymentStatus,
+          cancelledAt: options.data.cancelledAt ?? order.cancelledAt,
+          cancelReason:
+            options.data.cancelReason === undefined
+              ? order.cancelReason
+              : options.data.cancelReason,
+          updatedAt: new Date(),
+        };
+        orders.set(order.id, updatedOrder);
+        return includeOrderRelations(updatedOrder, options.include);
+      },
+      async count(options?: { where?: OrderWhere }) {
+        return [...orders.values()].filter((order) =>
+          matchesOrderWhere(order, options?.where),
+        ).length;
+      },
+      async deleteMany(options?: { where?: OrderWhere }) {
+        const matchingIds = [...orders.values()]
+          .filter((order) => matchesOrderWhere(order, options?.where))
+          .map((order) => order.id);
+        for (const id of matchingIds) {
+          orders.delete(id);
+          for (const item of orderItems.values()) {
+            if (item.orderId === id) {
+              orderItems.delete(item.id);
+            }
+          }
+        }
+        return { count: matchingIds.length };
+      },
+    },
+    async $queryRaw(strings?: TemplateStringsArray) {
+      const query = Array.isArray(strings) ? strings.join("") : "";
+      if (query.includes("OrderReferenceSequence")) {
+        const value = BigInt(orderReferenceSequence);
+        orderReferenceSequence += 1;
+        return [{ value }];
+      }
+
       const value = BigInt(saleReferenceSequence);
       saleReferenceSequence += 1;
       return [{ value }];
@@ -985,6 +1201,8 @@ export function createFakeDatabase() {
       const stockMovementSnapshot = new Map(stockMovements);
       const saleSnapshot = new Map(sales);
       const saleItemSnapshot = new Map(saleItems);
+      const orderSnapshot = new Map(orders);
+      const orderItemSnapshot = new Map(orderItems);
       try {
         return await callback(db as unknown as DatabaseClient);
       } catch (error) {
@@ -994,6 +1212,8 @@ export function createFakeDatabase() {
         stockMovements.clear();
         sales.clear();
         saleItems.clear();
+        orders.clear();
+        orderItems.clear();
         for (const [id, user] of userSnapshot) users.set(id, user);
         for (const [id, token] of refreshTokenSnapshot) {
           refreshTokens.set(id, token);
@@ -1004,6 +1224,8 @@ export function createFakeDatabase() {
         }
         for (const [id, sale] of saleSnapshot) sales.set(id, sale);
         for (const [id, item] of saleItemSnapshot) saleItems.set(id, item);
+        for (const [id, order] of orderSnapshot) orders.set(id, order);
+        for (const [id, item] of orderItemSnapshot) orderItems.set(id, item);
         throw error;
       }
     },
@@ -1017,5 +1239,7 @@ export function createFakeDatabase() {
     stockMovements,
     sales,
     saleItems,
+    orders,
+    orderItems,
   };
 }

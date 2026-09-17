@@ -12,6 +12,7 @@ export const openApiDocument = {
     { name: "Auth" },
     { name: "Products" },
     { name: "Inventory" },
+    { name: "Orders" },
     { name: "Sales" },
     { name: "Reports" },
   ],
@@ -219,6 +220,89 @@ export const openApiDocument = {
       PaymentStatus: {
         type: "string",
         enum: ["PAID", "PENDING"],
+      },
+      OrderStatus: {
+        type: "string",
+        enum: ["PENDING", "CONFIRMED", "CANCELLED", "FULFILLED"],
+      },
+      OrderPaymentStatus: {
+        type: "string",
+        enum: ["UNPAID", "PAID", "FAILED"],
+      },
+      OrderItem: {
+        type: "object",
+        description:
+          "Customer-safe historical product snapshot captured when the order was created.",
+        properties: {
+          id: { type: "string" },
+          productId: { type: "string" },
+          productName: { type: "string" },
+          productSku: { type: "string" },
+          productCategory: { $ref: "#/components/schemas/ProductCategory" },
+          productUnit: { $ref: "#/components/schemas/ProductUnit" },
+          quantity: { type: "string", example: "2.000" },
+          unitPrice: { type: "string", example: "150.00" },
+          lineSubtotal: { type: "string", example: "300.00" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      Order: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          reference: { type: "string", example: "MD-ORD-20260915-00001" },
+          status: { $ref: "#/components/schemas/OrderStatus" },
+          paymentStatus: { $ref: "#/components/schemas/OrderPaymentStatus" },
+          subtotal: { type: "string", example: "300.00" },
+          cancelledAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          cancelReason: { type: "string", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/OrderItem" },
+          },
+        },
+      },
+      OrderInput: {
+        type: "object",
+        required: ["items"],
+        description:
+          "Customer cart-like input. Prices, totals, references, and customer IDs are ignored; the backend calculates them from persisted products and the authenticated CUSTOMER user.",
+        properties: {
+          items: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              required: ["productId", "quantity"],
+              properties: {
+                productId: { type: "string" },
+                quantity: {
+                  type: "integer",
+                  minimum: 1,
+                  description:
+                    "Positive whole-unit quantity requested by the customer.",
+                },
+              },
+            },
+          },
+        },
+      },
+      CancelOrderInput: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            minLength: 1,
+            maxLength: 500,
+            description: "Optional customer cancellation reason.",
+          },
+        },
       },
       SaleStatus: {
         type: "string",
@@ -935,6 +1019,178 @@ export const openApiDocument = {
           "403": { description: "Insufficient permission" },
           "404": { description: "Product not found" },
           "409": { description: "Damage quantity would make stock negative" },
+        },
+      },
+    },
+    "/orders": {
+      get: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "List customer orders",
+        description:
+          "CUSTOMER users receive only their own orders. ADMIN and MANAGER may read customer orders through read:orders. STAFF has no broad order visibility.",
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            schema: { $ref: "#/components/schemas/OrderStatus" },
+          },
+          {
+            name: "paymentStatus",
+            in: "query",
+            schema: { $ref: "#/components/schemas/OrderPaymentStatus" },
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 25 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Orders returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Order" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid filter" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+        },
+      },
+      post: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "Create a customer order",
+        description:
+          "CUSTOMER only. Creates an order from product IDs and quantities. The backend revalidates active products, checks current availability, calculates price snapshots/subtotals, and does not reserve or decrement inventory in this foundation slice.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/OrderInput" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Order created",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Order" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Only CUSTOMER users can create orders" },
+          "404": { description: "Product not found" },
+          "409": {
+            description:
+              "Product inactive or currently unavailable in the requested quantity",
+          },
+        },
+      },
+    },
+    "/orders/{id}": {
+      get: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "Get an order by id",
+        description:
+          "CUSTOMER users can only read their own orders. ADMIN and MANAGER may read orders through read:orders. Returned items use historical snapshots.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Order returned",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Order" },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Order not found" },
+        },
+      },
+    },
+    "/orders/{id}/cancel": {
+      post: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "Cancel a customer order",
+        description:
+          "CUSTOMER only. A customer may cancel only their own PENDING or CONFIRMED order. Inventory is not restored because this foundation slice does not reserve or decrement inventory at order creation.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CancelOrderInput" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Order cancelled",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Order" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Only CUSTOMER users can cancel orders" },
+          "404": { description: "Order not found" },
+          "409": {
+            description:
+              "Order already cancelled or cannot be cancelled from its current state",
+          },
         },
       },
     },

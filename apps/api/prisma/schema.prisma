@@ -53,6 +53,19 @@ enum PaymentStatus {
   PENDING
 }
 
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  FULFILLED
+}
+
+enum OrderPaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+}
+
 model User {
   id           String         @id @default(cuid())
   email        String         @unique
@@ -68,6 +81,7 @@ model User {
   customerSales  Sale[]        @relation("CustomerSales")
   voidedSales    Sale[]        @relation("VoidedSales")
   stockMovements StockMovement[]
+  orders         Order[]
 
   @@index([role, active])
 }
@@ -101,12 +115,53 @@ model Product {
   updatedAt         DateTime        @updatedAt
 
   saleItems      SaleItem[]
+  orderItems     OrderItem[]
   stockMovements StockMovement[]
 
   @@index([category, active])
   @@index([unit, active])
   @@index([name])
   @@index([currentStock])
+}
+
+model Order {
+  id            String             @id @default(cuid())
+  reference     String             @unique
+  customerId    String
+  status        OrderStatus        @default(PENDING)
+  paymentStatus OrderPaymentStatus @default(UNPAID)
+  subtotal      Decimal            @db.Decimal(12, 2)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  customer User        @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus, createdAt])
+}
+
+model OrderItem {
+  id              String          @id @default(cuid())
+  orderId         String
+  productId       String
+  productName     String
+  productSku      String
+  productCategory ProductCategory
+  productUnit     ProductUnit
+  quantity        Decimal         @db.Decimal(12, 3)
+  unitPrice       Decimal         @db.Decimal(12, 2)
+  lineSubtotal    Decimal         @db.Decimal(12, 2)
+  createdAt       DateTime        @default(now())
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Sale {
