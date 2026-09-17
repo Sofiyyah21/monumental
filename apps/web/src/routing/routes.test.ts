@@ -76,13 +76,14 @@ describe("route authorization", () => {
     expect(hasPermission(staff, permissions.CREATE_SALES)).toBe(true);
   });
 
-  it("keeps customers in the customer-facing area", () => {
+  it("keeps customers in the customer-facing shop area", () => {
     const customer = user("CUSTOMER");
     const labels = getVisibleNavigation(customer).map(
       (route) => route.navLabel,
     );
 
-    expect(labels).toEqual(["Customer"]);
+    expect(labels).toEqual(["Shop"]);
+    expect(canAccessRoute(customer, routes.shop)).toBe(true);
     expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.sales)).toBe(false);
@@ -90,7 +91,14 @@ describe("route authorization", () => {
     expect(canAccessRoute(customer, routes.saleDetail)).toBe(false);
     expect(canAccessRoute(customer, routes.reports)).toBe(false);
     expect(canAccessRoute(customer, routes.admin)).toBe(false);
-    expect(getDefaultRouteForUser(customer)).toBe("/customer");
+    expect(getDefaultRouteForUser(customer)).toBe("/shop");
+  });
+
+  it("keeps the customer shop route separate from management roles", () => {
+    expect(canAccessRoute(user("ADMIN"), routes.shop)).toBe(false);
+    expect(canAccessRoute(user("MANAGER"), routes.shop)).toBe(false);
+    expect(canAccessRoute(user("STAFF"), routes.shop)).toBe(false);
+    expect(canAccessRoute(user("CUSTOMER"), routes.customer)).toBe(true);
   });
 
   it("chooses role-appropriate landing routes", () => {

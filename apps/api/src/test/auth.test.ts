@@ -414,7 +414,7 @@ describe("authentication and authorization", () => {
       .expect(403);
   });
 
-  it("blocks customers from internal APIs", async () => {
+  it("keeps customers out of internal APIs while allowing the customer catalog", async () => {
     const { app, user } = await createUserThroughDatabase(
       UserRole.CUSTOMER,
       "customer-restrict@example.com",
@@ -429,6 +429,18 @@ describe("authentication and authorization", () => {
     await request(app)
       .get("/api/v1/products")
       .set("Authorization", auth)
+      .expect(200);
+    await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", auth)
+      .send({
+        name: "Customer Product",
+        sku: "CUSTOMER-PRODUCT",
+        category: "DRINKS",
+        unit: "PACK",
+        costPrice: 100,
+        sellingPrice: 150,
+      })
       .expect(403);
     await request(app)
       .get("/api/v1/reports/dashboard")

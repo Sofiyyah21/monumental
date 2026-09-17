@@ -332,6 +332,44 @@ describe("ApiClient", () => {
     );
   });
 
+  it("uses the existing active product API for customer catalog lookup", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: [
+          {
+            id: "product_1",
+            name: "Monumental Drinks Pack",
+            sku: "DRINK-001",
+            category: "DRINKS",
+            unit: "PACK",
+            sellingPrice: "3500.00",
+            availability: "AVAILABLE",
+          },
+        ],
+      }),
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: new MemoryTokenStorage(),
+      fetchImpl,
+    });
+
+    const result = await client.listCustomerCatalogProducts({
+      search: "drink",
+      category: "DRINKS",
+      unit: "PACK",
+    });
+
+    expect(result[0]?.availability).toBe("AVAILABLE");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.test/api/v1/products?search=drink&category=DRINKS&unit=PACK&active=true",
+      expect.objectContaining({
+        credentials: "include",
+      }),
+    );
+  });
+
   it("uses the inventory API contract", async () => {
     const requests: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
     const fetchImpl = vi.fn(

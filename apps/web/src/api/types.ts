@@ -1,6 +1,7 @@
 export type UserRole = "ADMIN" | "MANAGER" | "STAFF" | "CUSTOMER";
 export type ProductCategory = "DRINKS" | "NOODLES" | "VEGETABLE_OIL" | "SUGAR";
 export type ProductUnit = "PACK" | "LITER" | "CUP";
+export type CustomerProductAvailability = "AVAILABLE" | "OUT_OF_STOCK";
 export type SaleStatus = "COMPLETED" | "VOIDED";
 export type PaymentMethod = "CASH" | "TRANSFER" | "CARD" | "OTHER";
 export type PaymentStatus = "PAID" | "PENDING";
@@ -167,6 +168,16 @@ export type Product = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CustomerCatalogProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  category: ProductCategory;
+  unit: ProductUnit;
+  sellingPrice: string;
+  availability: CustomerProductAvailability;
 };
 
 export type ProductFilters = {

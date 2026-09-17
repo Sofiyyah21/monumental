@@ -3,6 +3,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/Feedback";
+import { ShopPage } from "./customer/ShopPage";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { InventoryPage } from "./inventory/InventoryPage";
 import { FoundationPage } from "./pages/FoundationPage";
@@ -136,6 +137,14 @@ function AppRoutes() {
           onNewSale={() => navigate(routes.sales.path)}
           saleId={saleId}
         />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.shop.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <ShopPage />
       </AppShell>
     );
   }

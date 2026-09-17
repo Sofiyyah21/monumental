@@ -25,6 +25,16 @@ export type ListProductsInput = {
   search?: string;
 };
 
+export type CustomerCatalogProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  category: ProductCategory;
+  unit: ProductUnit;
+  sellingPrice: Prisma.Decimal;
+  availability: "AVAILABLE" | "OUT_OF_STOCK";
+};
+
 export class ProductService {
   constructor(private readonly db: DatabaseClient) {}
 
@@ -51,6 +61,36 @@ export class ProductService {
       throw new AppError("Product not found", 404, "PRODUCT_NOT_FOUND");
     }
     return product;
+  }
+
+  async listCustomerCatalog(
+    input: ListProductsInput = {},
+  ): Promise<CustomerCatalogProduct[]> {
+    const products = await this.db.product.findMany({
+      where: {
+        category: input.category,
+        unit: input.unit,
+        active: true,
+        OR: input.search
+          ? [
+              { name: { contains: input.search, mode: "insensitive" } },
+              { sku: { contains: input.search, mode: "insensitive" } },
+            ]
+          : undefined,
+      },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    });
+
+    return products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      category: product.category,
+      unit: product.unit,
+      sellingPrice: product.sellingPrice,
+      availability:
+        Number(product.currentStock) > 0 ? "AVAILABLE" : "OUT_OF_STOCK",
+    }));
   }
 
   async create(input: CreateProductInput) {

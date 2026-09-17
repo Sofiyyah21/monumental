@@ -196,7 +196,7 @@ describe("product catalog API", () => {
       .expect(404);
   });
 
-  it("lists products with filters for staff and blocks customers", async () => {
+  it("lists products with filters and returns a safe active catalog for customers", async () => {
     const { app, db } = createProductTestContext();
     const managerAuth = await createAuth(db, UserRole.MANAGER);
     const staffAuth = await createAuth(db, UserRole.STAFF);
@@ -207,7 +207,7 @@ describe("product catalog API", () => {
       .set("Authorization", managerAuth)
       .send(validProduct)
       .expect(201);
-    await request(app)
+    const sugarResponse = await request(app)
       .post("/api/v1/products")
       .set("Authorization", managerAuth)
       .send({
@@ -240,9 +240,28 @@ describe("product catalog API", () => {
     expect(searchResponse.body.data[0].sku).toBe(validProduct.sku);
 
     await request(app)
+      .patch(`/api/v1/products/${sugarResponse.body.data.id}/deactivate`)
+      .set("Authorization", managerAuth)
+      .expect(200);
+
+    const customerResponse = await request(app)
       .get("/api/v1/products")
       .set("Authorization", customerAuth)
-      .expect(403);
+      .expect(200);
+
+    expect(customerResponse.body.data).toHaveLength(1);
+    expect(customerResponse.body.data[0]).toMatchObject({
+      name: validProduct.name,
+      sku: validProduct.sku,
+      category: ProductCategory.DRINKS,
+      unit: ProductUnit.PACK,
+      sellingPrice: String(validProduct.sellingPrice),
+      availability: "OUT_OF_STOCK",
+    });
+    expect(customerResponse.body.data[0]).not.toHaveProperty("costPrice");
+    expect(customerResponse.body.data[0]).not.toHaveProperty("currentStock");
+    expect(customerResponse.body.data[0]).not.toHaveProperty("reorderLevel");
+    expect(customerResponse.body.data[0]).not.toHaveProperty("active");
   });
 
   it("updates products as managers and admins while rejecting invalid updates", async () => {

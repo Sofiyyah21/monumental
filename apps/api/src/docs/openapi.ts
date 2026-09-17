@@ -60,6 +60,23 @@ export const openApiDocument = {
           updatedAt: { type: "string", format: "date-time" },
         },
       },
+      CustomerCatalogProduct: {
+        type: "object",
+        description:
+          "Customer-safe active product projection returned to CUSTOMER users by GET /products.",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          sku: { type: "string" },
+          category: { $ref: "#/components/schemas/ProductCategory" },
+          unit: { $ref: "#/components/schemas/ProductUnit" },
+          sellingPrice: { type: "string", example: "150.00" },
+          availability: {
+            type: "string",
+            enum: ["AVAILABLE", "OUT_OF_STOCK"],
+          },
+        },
+      },
       ProductInput: {
         type: "object",
         required: [
@@ -518,9 +535,9 @@ export const openApiDocument = {
       get: {
         tags: ["Products"],
         security: [{ bearerAuth: [] }],
-        summary: "List products for internal shop users",
+        summary: "List products",
         description:
-          "Requires read:products permission. Customers cannot access this internal product-management API.",
+          "Internal users require read:products permission and receive product-management records. CUSTOMER users receive active customer-safe catalog records only.",
         parameters: [
           {
             name: "category",
@@ -554,7 +571,14 @@ export const openApiDocument = {
                     success: { type: "boolean", example: true },
                     data: {
                       type: "array",
-                      items: { $ref: "#/components/schemas/Product" },
+                      items: {
+                        oneOf: [
+                          { $ref: "#/components/schemas/Product" },
+                          {
+                            $ref: "#/components/schemas/CustomerCatalogProduct",
+                          },
+                        ],
+                      },
                     },
                   },
                 },

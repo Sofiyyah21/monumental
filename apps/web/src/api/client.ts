@@ -6,6 +6,7 @@ import type {
   AuthResponse,
   BestSellersReport,
   CreateSaleInput,
+  CustomerCatalogProduct,
   InventoryFilters,
   InventoryItem,
   InventoryMutationResult,
@@ -176,6 +177,13 @@ export class ApiClient {
   async listProducts(filters: ProductFilters = {}) {
     const query = toQueryString(filters);
     return this.request<Product[]>(`/products${query ? `?${query}` : ""}`);
+  }
+
+  async listCustomerCatalogProducts(filters: ProductFilters = {}) {
+    const query = toQueryString({ ...filters, active: true });
+    return this.request<CustomerCatalogProduct[]>(
+      `/products${query ? `?${query}` : ""}`,
+    );
   }
 
   async createProduct(input: ProductInput) {

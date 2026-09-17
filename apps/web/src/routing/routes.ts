@@ -20,6 +20,7 @@ type RouteKey =
   | "salesHistory"
   | "saleDetail"
   | "reports"
+  | "shop"
   | "customer"
   | "forbidden";
 
@@ -85,11 +86,18 @@ export const routes: Record<RouteKey, AppRoute> = {
     requiresAuth: true,
     permission: permissions.READ_REPORTS,
   },
+  shop: {
+    path: "/shop",
+    title: "Shop",
+    description: "Customer-facing Monumental Details catalog.",
+    navLabel: "Shop",
+    requiresAuth: true,
+    roles: ["CUSTOMER"],
+  },
   customer: {
     path: "/customer",
     title: "Customer area",
     description: "Customer-facing account foundation.",
-    navLabel: "Customer",
     requiresAuth: true,
     roles: ["CUSTOMER"],
   },
@@ -126,7 +134,7 @@ export function getVisibleNavigation(user: CurrentUser | null) {
 
 export function getDefaultRouteForUser(user: CurrentUser) {
   if (user.role === "CUSTOMER") {
-    return routes.customer.path;
+    return routes.shop.path;
   }
   if (user.role === "ADMIN") {
     return routes.admin.path;

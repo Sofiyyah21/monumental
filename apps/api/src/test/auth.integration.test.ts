@@ -359,7 +359,7 @@ describeDatabase("database-backed authentication integration", () => {
     await request(app)
       .get("/api/v1/products")
       .set("Authorization", customerAuth)
-      .expect(403);
+      .expect(200);
     await request(app)
       .post("/api/v1/auth/users")
       .set("Authorization", managerAuth)
