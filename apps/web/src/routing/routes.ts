@@ -22,6 +22,8 @@ type RouteKey =
   | "reports"
   | "shop"
   | "cart"
+  | "orders"
+  | "orderDetail"
   | "customer"
   | "forbidden";
 
@@ -103,6 +105,21 @@ export const routes: Record<RouteKey, AppRoute> = {
     requiresAuth: true,
     roles: ["CUSTOMER"],
   },
+  orders: {
+    path: "/orders",
+    title: "My orders",
+    description: "Customer order history.",
+    navLabel: "My Orders",
+    requiresAuth: true,
+    roles: ["CUSTOMER"],
+  },
+  orderDetail: {
+    path: "/orders/:id",
+    title: "Order detail",
+    description: "Customer order detail.",
+    requiresAuth: true,
+    roles: ["CUSTOMER"],
+  },
   customer: {
     path: "/customer",
     title: "Customer area",
@@ -164,6 +181,9 @@ export function findRoute(pathname: string) {
   }
   if (pathname.startsWith("/sales/") && pathname !== routes.salesHistory.path) {
     return routes.saleDetail;
+  }
+  if (pathname.startsWith("/orders/")) {
+    return routes.orderDetail;
   }
   return undefined;
 }

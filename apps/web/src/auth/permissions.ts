@@ -9,6 +9,7 @@ export const permissions = {
   READ_SALES: "read:sales",
   CREATE_SALES: "create:sales",
   VOID_SALES: "void:sales",
+  READ_ORDERS: "read:orders",
   READ_REPORTS: "read:reports",
   READ_ADMIN_DASHBOARD: "read:admin-dashboard",
 } as const satisfies Record<string, Permission>;
@@ -23,6 +24,7 @@ const rolePermissions: Record<UserRole, ReadonlySet<Permission>> = {
     permissions.READ_SALES,
     permissions.CREATE_SALES,
     permissions.VOID_SALES,
+    permissions.READ_ORDERS,
     permissions.READ_REPORTS,
   ]),
   STAFF: new Set([

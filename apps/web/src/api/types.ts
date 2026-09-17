@@ -3,8 +3,10 @@ export type ProductCategory = "DRINKS" | "NOODLES" | "VEGETABLE_OIL" | "SUGAR";
 export type ProductUnit = "PACK" | "LITER" | "CUP";
 export type CustomerProductAvailability = "AVAILABLE" | "OUT_OF_STOCK";
 export type SaleStatus = "COMPLETED" | "VOIDED";
+export type OrderStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "FULFILLED";
 export type PaymentMethod = "CASH" | "TRANSFER" | "CARD" | "OTHER";
 export type PaymentStatus = "PAID" | "PENDING";
+export type OrderPaymentStatus = "UNPAID" | "PAID" | "FAILED";
 export type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
 export type StockMovementType =
   "RECEIVED" | "SOLD" | "ADJUSTMENT" | "RETURN" | "DAMAGE";
@@ -18,6 +20,7 @@ export type Permission =
   | "read:sales"
   | "create:sales"
   | "void:sales"
+  | "read:orders"
   | "read:reports"
   | "read:admin-dashboard";
 
@@ -153,6 +156,49 @@ export type CreateSaleInput = {
 
 export type VoidSaleInput = {
   reason: string;
+};
+
+export type OrderItem = {
+  id: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  productCategory: ProductCategory;
+  productUnit: ProductUnit;
+  quantity: string;
+  unitPrice: string;
+  lineSubtotal: string;
+  createdAt: string;
+};
+
+export type Order = {
+  id: string;
+  reference: string;
+  status: OrderStatus;
+  paymentStatus: OrderPaymentStatus;
+  subtotal: string;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: OrderItem[];
+};
+
+export type CreateOrderInput = {
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+};
+
+export type OrderFilters = {
+  status?: OrderStatus;
+  paymentStatus?: OrderPaymentStatus;
+  limit?: number;
+};
+
+export type CancelOrderInput = {
+  reason?: string;
 };
 
 export type Product = {

@@ -75,7 +75,7 @@ export function ShopCatalogView({
         <div className="shop-note">
           <strong>Catalog only</strong>
           <span>
-            Orders and checkout will be added in a later customer slice.
+            Add available products to your cart before placing an order.
           </span>
         </div>
       </section>

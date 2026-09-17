@@ -5,7 +5,9 @@ import type {
   ApiEnvelope,
   AuthResponse,
   BestSellersReport,
+  CancelOrderInput,
   CreateSaleInput,
+  CreateOrderInput,
   CustomerCatalogProduct,
   InventoryFilters,
   InventoryItem,
@@ -15,6 +17,8 @@ import type {
   ProductFilters,
   ProductInput,
   ProductUpdateInput,
+  Order,
+  OrderFilters,
   ReportPeriod,
   Sale,
   SaleFilters,
@@ -274,6 +278,29 @@ export class ApiClient {
 
   async voidSale(id: string, input: VoidSaleInput) {
     return this.request<Sale>(`/sales/${id}/void`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async createOrder(input: CreateOrderInput) {
+    return this.request<Order>("/orders", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async listOrders(filters: OrderFilters = {}) {
+    const query = toQueryString(filters);
+    return this.request<Order[]>(`/orders${query ? `?${query}` : ""}`);
+  }
+
+  async getOrder(id: string) {
+    return this.request<Order>(`/orders/${id}`);
+  }
+
+  async cancelOrder(id: string, input: CancelOrderInput = {}) {
+    return this.request<Order>(`/orders/${id}/cancel`, {
       method: "POST",
       body: JSON.stringify(input),
     });

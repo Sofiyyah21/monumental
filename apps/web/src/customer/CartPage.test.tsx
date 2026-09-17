@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CartView } from "./CartPage";
 import { summarizeCustomerCart, type CustomerCartItem } from "./cart-utils";
+import { buildCreateOrderInput } from "./order-utils";
 
 const cartItems: CustomerCartItem[] = [
   {
@@ -31,6 +32,7 @@ function renderCart(items: CustomerCartItem[] = cartItems) {
       onContinueShopping={vi.fn()}
       onDecreaseQuantity={vi.fn()}
       onIncreaseQuantity={vi.fn()}
+      onPlaceOrder={vi.fn()}
       onRemoveItem={vi.fn()}
       onUpdateQuantity={vi.fn()}
       summary={summarizeCustomerCart(items)}
@@ -61,7 +63,8 @@ describe("CartView", () => {
     expect(html).toContain("<dd>5</dd>");
     expect(html).toContain("Cart subtotal");
     expect(html).toContain("₦7,750.00");
-    expect(html).toContain("This is not a final total");
+    expect(html).toContain("cart subtotal preview");
+    expect(html).toContain("Place Order");
   });
 
   it("renders a useful empty cart state with a continue shopping action", () => {
@@ -77,5 +80,54 @@ describe("CartView", () => {
 
     expect(html).toContain("customer-cart-lines");
     expect(html).not.toContain("<table");
+  });
+
+  it("shows order submission loading and API error states without hiding cart items", () => {
+    const loadingHtml = renderToStaticMarkup(
+      <CartView
+        items={cartItems}
+        onContinueShopping={vi.fn()}
+        onDecreaseQuantity={vi.fn()}
+        onIncreaseQuantity={vi.fn()}
+        onPlaceOrder={vi.fn()}
+        onRemoveItem={vi.fn()}
+        onUpdateQuantity={vi.fn()}
+        summary={summarizeCustomerCart(cartItems)}
+        submittingOrder
+      />,
+    );
+    const errorHtml = renderToStaticMarkup(
+      <CartView
+        items={cartItems}
+        onContinueShopping={vi.fn()}
+        onDecreaseQuantity={vi.fn()}
+        onIncreaseQuantity={vi.fn()}
+        onPlaceOrder={vi.fn()}
+        onRemoveItem={vi.fn()}
+        onUpdateQuantity={vi.fn()}
+        orderError="One or more cart items are no longer available."
+        summary={summarizeCustomerCart(cartItems)}
+      />,
+    );
+
+    expect(loadingHtml).toContain("Placing order");
+    expect(loadingHtml).toContain("disabled");
+    expect(errorHtml).toContain("Order could not be placed");
+    expect(errorHtml).toContain("Monumental Drinks Pack");
+  });
+
+  it("builds an order request from product IDs and quantities only", () => {
+    const payload = buildCreateOrderInput(cartItems);
+
+    expect(payload).toEqual({
+      items: [
+        { productId: "product_1", quantity: 2 },
+        { productId: "product_2", quantity: 3 },
+      ],
+    });
+    expect(JSON.stringify(payload)).not.toContain("sellingPrice");
+    expect(JSON.stringify(payload)).not.toContain("subtotal");
+    expect(JSON.stringify(payload)).not.toContain("customerId");
+    expect(JSON.stringify(payload)).not.toContain("reference");
   });
 });

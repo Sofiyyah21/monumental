@@ -1,12 +1,48 @@
+import { useRef, useState } from "react";
+import { ApiError, apiClient } from "../api/client";
 import { EmptyState } from "../components/Feedback";
 import { formatMoney } from "../products/product-utils";
 import { navigate } from "../routing/useBrowserRoute";
 import { routes } from "../routing/routes";
 import { type CartSummary, type CustomerCartItem } from "./cart-utils";
+import { buildCreateOrderInput, orderDisplayError } from "./order-utils";
 import { useCustomerCart } from "./useCustomerCart";
 
 export function CartPage() {
   const cart = useCustomerCart();
+  const submittingRef = useRef(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitOrder() {
+    if (submittingRef.current) {
+      return;
+    }
+    if (cart.items.length === 0) {
+      setOrderError("Add at least one product before placing an order.");
+      return;
+    }
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setOrderError(null);
+    try {
+      const order = await apiClient.createOrder(
+        buildCreateOrderInput(cart.items),
+      );
+      cart.clearCart();
+      navigate(`/orders/${order.id}`);
+    } catch (error) {
+      setOrderError(
+        error instanceof ApiError
+          ? orderDisplayError(error)
+          : "Your order could not be placed. Please try again.",
+      );
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
 
   return (
     <CartView
@@ -14,9 +50,12 @@ export function CartPage() {
       onContinueShopping={() => navigate(routes.shop.path)}
       onDecreaseQuantity={cart.decreaseQuantity}
       onIncreaseQuantity={cart.increaseQuantity}
+      onPlaceOrder={() => void submitOrder()}
       onRemoveItem={cart.removeItem}
       onUpdateQuantity={cart.updateQuantity}
+      orderError={orderError}
       summary={cart.summary}
+      submittingOrder={submitting}
     />
   );
 }
@@ -26,17 +65,23 @@ export function CartView({
   onContinueShopping,
   onDecreaseQuantity,
   onIncreaseQuantity,
+  onPlaceOrder,
   onRemoveItem,
   onUpdateQuantity,
+  orderError = null,
   summary,
+  submittingOrder = false,
 }: {
   items: CustomerCartItem[];
   onContinueShopping(): void;
   onDecreaseQuantity(productId: string): void;
   onIncreaseQuantity(productId: string): void;
+  onPlaceOrder(): void;
   onRemoveItem(productId: string): void;
   onUpdateQuantity(productId: string, quantity: number): void;
+  orderError?: string | null;
   summary: CartSummary;
+  submittingOrder?: boolean;
 }) {
   return (
     <div className="cart-grid">
@@ -48,17 +93,25 @@ export function CartView({
           <p className="eyebrow">Customer cart</p>
           <h2 id="cart-title">Review your cart</h2>
           <p>
-            Adjust quantities before the future checkout workflow. Prices shown
-            here are a cart subtotal preview.
+            Adjust quantities before placing your order. Prices shown here are a
+            cart subtotal preview; the backend confirms the order total.
           </p>
         </div>
         <div className="shop-note">
-          <strong>No checkout yet</strong>
+          <strong>Backend validated</strong>
           <span>
-            Orders, payment, and final validation will be added later.
+            Product availability and prices are checked again when you place the
+            order.
           </span>
         </div>
       </section>
+
+      {orderError ? (
+        <div className="alert alert--error" role="alert">
+          <strong>Order could not be placed</strong>
+          <span>{orderError}</span>
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <EmptyCart onContinueShopping={onContinueShopping} />
@@ -88,7 +141,9 @@ export function CartView({
 
           <CartSummaryPanel
             onContinueShopping={onContinueShopping}
+            onPlaceOrder={onPlaceOrder}
             summary={summary}
+            submittingOrder={submittingOrder}
           />
         </div>
       )}
@@ -180,10 +235,14 @@ function CartLine({
 
 function CartSummaryPanel({
   onContinueShopping,
+  onPlaceOrder,
   summary,
+  submittingOrder,
 }: {
   onContinueShopping(): void;
+  onPlaceOrder(): void;
   summary: CartSummary;
+  submittingOrder: boolean;
 }) {
   return (
     <aside
@@ -209,11 +268,20 @@ function CartSummaryPanel({
         </div>
       </dl>
       <p className="cart-boundary-note">
-        This is not a final total. Future checkout will revalidate products,
-        prices, and availability on the backend.
+        This is a cart subtotal preview. The backend will revalidate products,
+        prices, and availability before creating the order.
       </p>
       <button
         className="button button--primary"
+        disabled={submittingOrder}
+        onClick={onPlaceOrder}
+        type="button"
+      >
+        {submittingOrder ? "Placing order" : "Place Order"}
+      </button>
+      <button
+        className="button button--quiet"
+        disabled={submittingOrder}
         onClick={onContinueShopping}
         type="button"
       >

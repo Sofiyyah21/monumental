@@ -507,4 +507,72 @@ describe("ApiClient", () => {
       }),
     );
   });
+
+  it("uses the customer orders API contract without sending client-side prices or references", async () => {
+    const order = {
+      id: "order_1",
+      reference: "MD-ORD-20260917-00001",
+      status: "PENDING",
+      paymentStatus: "UNPAID",
+      subtotal: "7000.00",
+      cancelledAt: null,
+      cancelReason: null,
+      createdAt: "2026-09-17T10:00:00.000Z",
+      updatedAt: "2026-09-17T10:00:00.000Z",
+      items: [],
+    };
+    const requests: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push([input, init]);
+        return jsonResponse({
+          success: true,
+          data:
+            input.toString().endsWith("/orders") && init?.method !== "POST"
+              ? [order]
+              : order,
+        });
+      },
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: new MemoryTokenStorage(),
+      fetchImpl,
+    });
+
+    await client.createOrder({
+      items: [{ productId: "product_1", quantity: 2 }],
+    });
+    await client.listOrders({ status: "PENDING", paymentStatus: "UNPAID" });
+    await client.getOrder("order_1");
+    await client.cancelOrder("order_1", { reason: "Changed plans" });
+
+    expect(requests[0]?.[0]).toBe("https://api.test/api/v1/orders");
+    expect(requests[0]?.[1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          items: [{ productId: "product_1", quantity: 2 }],
+        }),
+      }),
+    );
+    const createBody = String(requests[0]?.[1]?.body);
+    expect(createBody).not.toContain("sellingPrice");
+    expect(createBody).not.toContain("subtotal");
+    expect(createBody).not.toContain("customerId");
+    expect(createBody).not.toContain("reference");
+    expect(requests[1]?.[0]).toBe(
+      "https://api.test/api/v1/orders?status=PENDING&paymentStatus=UNPAID",
+    );
+    expect(requests[2]?.[0]).toBe("https://api.test/api/v1/orders/order_1");
+    expect(requests[3]?.[0]).toBe(
+      "https://api.test/api/v1/orders/order_1/cancel",
+    );
+    expect(requests[3]?.[1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "Changed plans" }),
+      }),
+    );
+  });
 });

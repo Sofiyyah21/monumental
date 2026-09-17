@@ -83,9 +83,11 @@ describe("route authorization", () => {
       (route) => route.navLabel,
     );
 
-    expect(labels).toEqual(["Shop", "Cart"]);
+    expect(labels).toEqual(["Shop", "Cart", "My Orders"]);
     expect(canAccessRoute(customer, routes.shop)).toBe(true);
     expect(canAccessRoute(customer, routes.cart)).toBe(true);
+    expect(canAccessRoute(customer, routes.orders)).toBe(true);
+    expect(canAccessRoute(customer, routes.orderDetail)).toBe(true);
     expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.sales)).toBe(false);
@@ -103,6 +105,9 @@ describe("route authorization", () => {
     expect(canAccessRoute(user("ADMIN"), routes.cart)).toBe(false);
     expect(canAccessRoute(user("MANAGER"), routes.cart)).toBe(false);
     expect(canAccessRoute(user("STAFF"), routes.cart)).toBe(false);
+    expect(canAccessRoute(user("ADMIN"), routes.orders)).toBe(false);
+    expect(canAccessRoute(user("MANAGER"), routes.orders)).toBe(false);
+    expect(canAccessRoute(user("STAFF"), routes.orders)).toBe(false);
     expect(canAccessRoute(user("CUSTOMER"), routes.customer)).toBe(true);
   });
 
@@ -121,5 +126,7 @@ describe("route authorization", () => {
   it("recognizes sales history and dynamic sale detail routes", () => {
     expect(findRoute("/sales/history")).toBe(routes.salesHistory);
     expect(findRoute("/sales/sale_1")).toBe(routes.saleDetail);
+    expect(findRoute("/orders")).toBe(routes.orders);
+    expect(findRoute("/orders/order_1")).toBe(routes.orderDetail);
   });
 });

@@ -5,6 +5,10 @@ import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/Feedback";
 import { CartPage } from "./customer/CartPage";
 import { CustomerCartProvider } from "./customer/CartContext";
+import {
+  CustomerOrderDetailPage,
+  CustomerOrdersPage,
+} from "./customer/CustomerOrdersPage";
 import { ShopPage } from "./customer/ShopPage";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { InventoryPage } from "./inventory/InventoryPage";
@@ -155,6 +159,27 @@ function AppRoutes() {
     return (
       <AppShell activeRoute={activeRoute}>
         <CartPage />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.orders.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <CustomerOrdersPage onOpenOrder={(id) => navigate(`/orders/${id}`)} />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.orderDetail.path) {
+    const orderId = decodeURIComponent(pathname.replace("/orders/", ""));
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <CustomerOrderDetailPage
+          onBackToOrders={() => navigate(routes.orders.path)}
+          onContinueShopping={() => navigate(routes.shop.path)}
+          orderId={orderId}
+        />
       </AppShell>
     );
   }
