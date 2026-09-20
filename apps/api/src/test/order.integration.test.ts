@@ -46,12 +46,16 @@ async function cleanupIntegrationOrders() {
 }
 
 async function createCustomer() {
+  return createUser(UserRole.CUSTOMER);
+}
+
+async function createUser(role: UserRole) {
   return prisma.user.create({
     data: {
-      email: `order-${crypto.randomUUID()}@${testEmailDomain}`,
-      name: "Order Integration Customer",
+      email: `${role.toLowerCase()}-${crypto.randomUUID()}@${testEmailDomain}`,
+      name: `Order Integration ${role}`,
       passwordHash: "hashed",
-      role: UserRole.CUSTOMER,
+      role,
     },
   });
 }
@@ -171,5 +175,195 @@ describeDatabase("database-backed customer order integration", () => {
     expect(orderCount).toBe(0);
     expect(itemCount).toBe(0);
     expect(storedProduct.currentStock.toNumber()).toBe(1);
+  });
+
+  it("confirms and fulfills orders with audit metadata without touching inventory or sales", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 5 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 2 }],
+    });
+
+    const confirmed = await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    expect(confirmed.status).toBe(OrderStatus.CONFIRMED);
+    expect(confirmed.confirmedById).toBe(manager.id);
+    expect(confirmed.confirmedAt).toBeInstanceOf(Date);
+
+    const fulfilled = await orderService.fulfill({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    expect(fulfilled.status).toBe(OrderStatus.FULFILLED);
+    expect(fulfilled.fulfilledById).toBe(manager.id);
+    expect(fulfilled.fulfilledAt).toBeInstanceOf(Date);
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    const movementCount = await prisma.stockMovement.count({
+      where: { productId: product.id },
+    });
+    const saleCount = await prisma.sale.count();
+
+    expect(storedProduct.currentStock.toNumber()).toBe(5);
+    expect(movementCount).toBe(0);
+    expect(saleCount).toBe(0);
+  });
+
+  it("cancels confirmed orders with actor audit metadata and no inventory restoration", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 4 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 1 }],
+    });
+
+    await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    const cancelled = await orderService.cancel({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+      reason: "Customer order cannot be supplied",
+    });
+
+    expect(cancelled.status).toBe(OrderStatus.CANCELLED);
+    expect(cancelled.cancelledById).toBe(manager.id);
+    expect(cancelled.cancelledAt).toBeInstanceOf(Date);
+    expect(cancelled.cancelReason).toBe("Customer order cannot be supplied");
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(storedProduct.currentStock.toNumber()).toBe(4);
+    expect(
+      await prisma.stockMovement.count({ where: { productId: product.id } }),
+    ).toBe(0);
+    expect(await prisma.sale.count()).toBe(0);
+  });
+
+  it("rejects invalid lifecycle transitions and management authorization gaps", async () => {
+    const customer = await createCustomer();
+    const staff = await createUser(UserRole.STAFF);
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 4 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 1 }],
+    });
+
+    await expect(
+      orderService.confirm({
+        orderId: order.id,
+        requesterId: customer.id,
+        requesterRole: UserRole.CUSTOMER,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    await expect(
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: staff.id,
+        requesterRole: UserRole.STAFF,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    await expect(
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "ORDER_NOT_FULFILLABLE",
+    });
+  });
+
+  it("prevents concurrent lifecycle transitions from producing invalid final states", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 6 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 1 }],
+    });
+
+    const confirmResults = await Promise.allSettled([
+      orderService.confirm({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+      orderService.confirm({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+    ]);
+
+    expect(
+      confirmResults.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      confirmResults.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+
+    const raceResults = await Promise.allSettled([
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+      orderService.cancel({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+        reason: "Race cancellation",
+      }),
+    ]);
+
+    expect(
+      raceResults.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      raceResults.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect([OrderStatus.FULFILLED, OrderStatus.CANCELLED]).toContain(
+      storedOrder.status,
+    );
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(storedProduct.currentStock.toNumber()).toBe(6);
+    expect(
+      await prisma.stockMovement.count({ where: { productId: product.id } }),
+    ).toBe(0);
+    expect(await prisma.sale.count()).toBe(0);
   });
 });

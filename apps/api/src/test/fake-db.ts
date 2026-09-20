@@ -128,7 +128,12 @@ type OrderRecord = {
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
   subtotal: Prisma.Decimal;
+  confirmedAt: Date | null;
+  confirmedById: string | null;
+  fulfilledAt: Date | null;
+  fulfilledById: string | null;
   cancelledAt: Date | null;
+  cancelledById: string | null;
   cancelReason: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -154,6 +159,10 @@ type OrderWhere = {
   customerId?: string;
   status?: OrderStatus;
   paymentStatus?: OrderPaymentStatus;
+  createdAt?: {
+    gte?: Date;
+    lte?: Date;
+  };
 };
 
 type StockMovementRecord = {
@@ -469,6 +478,12 @@ export function createFakeDatabase() {
       return false;
     }
     if (where.paymentStatus && order.paymentStatus !== where.paymentStatus) {
+      return false;
+    }
+    if (where.createdAt?.gte && order.createdAt < where.createdAt.gte) {
+      return false;
+    }
+    if (where.createdAt?.lte && order.createdAt > where.createdAt.lte) {
       return false;
     }
     return true;
@@ -1110,7 +1125,12 @@ export function createFakeDatabase() {
           status: options.data.status,
           paymentStatus: options.data.paymentStatus,
           subtotal: options.data.subtotal,
+          confirmedAt: null,
+          confirmedById: null,
+          fulfilledAt: null,
+          fulfilledById: null,
           cancelledAt: null,
+          cancelledById: null,
           cancelReason: null,
           createdAt: options.data.createdAt ?? now,
           updatedAt: now,
@@ -1136,7 +1156,12 @@ export function createFakeDatabase() {
         data: Partial<{
           status: OrderStatus;
           paymentStatus: OrderPaymentStatus;
+          confirmedAt: Date;
+          confirmedById: string | null;
+          fulfilledAt: Date;
+          fulfilledById: string | null;
           cancelledAt: Date;
+          cancelledById: string | null;
           cancelReason: string | null;
         }>;
         include?: { items?: boolean };
@@ -1152,7 +1177,21 @@ export function createFakeDatabase() {
           ...order,
           status: options.data.status ?? order.status,
           paymentStatus: options.data.paymentStatus ?? order.paymentStatus,
+          confirmedAt: options.data.confirmedAt ?? order.confirmedAt,
+          confirmedById:
+            options.data.confirmedById === undefined
+              ? order.confirmedById
+              : options.data.confirmedById,
+          fulfilledAt: options.data.fulfilledAt ?? order.fulfilledAt,
+          fulfilledById:
+            options.data.fulfilledById === undefined
+              ? order.fulfilledById
+              : options.data.fulfilledById,
           cancelledAt: options.data.cancelledAt ?? order.cancelledAt,
+          cancelledById:
+            options.data.cancelledById === undefined
+              ? order.cancelledById
+              : options.data.cancelledById,
           cancelReason:
             options.data.cancelReason === undefined
               ? order.cancelReason

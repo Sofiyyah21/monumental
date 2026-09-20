@@ -82,6 +82,9 @@ model User {
   voidedSales    Sale[]        @relation("VoidedSales")
   stockMovements StockMovement[]
   orders         Order[]
+  confirmedOrders Order[]       @relation("ConfirmedOrders")
+  fulfilledOrders Order[]       @relation("FulfilledOrders")
+  cancelledOrders Order[]       @relation("CancelledOrders")
 
   @@index([role, active])
 }
@@ -131,17 +134,28 @@ model Order {
   status        OrderStatus        @default(PENDING)
   paymentStatus OrderPaymentStatus @default(UNPAID)
   subtotal      Decimal            @db.Decimal(12, 2)
+  confirmedAt   DateTime?
+  confirmedById String?
+  fulfilledAt   DateTime?
+  fulfilledById String?
   cancelledAt   DateTime?
+  cancelledById String?
   cancelReason  String?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
-  customer User        @relation(fields: [customerId], references: [id])
-  items    OrderItem[]
+  customer    User  @relation(fields: [customerId], references: [id])
+  confirmedBy User? @relation("ConfirmedOrders", fields: [confirmedById], references: [id])
+  fulfilledBy User? @relation("FulfilledOrders", fields: [fulfilledById], references: [id])
+  cancelledBy User? @relation("CancelledOrders", fields: [cancelledById], references: [id])
+  items       OrderItem[]
 
   @@index([customerId, createdAt])
   @@index([status, createdAt])
   @@index([paymentStatus, createdAt])
+  @@index([confirmedById, confirmedAt])
+  @@index([fulfilledById, fulfilledAt])
+  @@index([cancelledById, cancelledAt])
 }
 
 model OrderItem {

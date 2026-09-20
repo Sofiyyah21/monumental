@@ -254,11 +254,24 @@ export const openApiDocument = {
           status: { $ref: "#/components/schemas/OrderStatus" },
           paymentStatus: { $ref: "#/components/schemas/OrderPaymentStatus" },
           subtotal: { type: "string", example: "300.00" },
+          confirmedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          confirmedById: { type: "string", nullable: true },
+          fulfilledAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          fulfilledById: { type: "string", nullable: true },
           cancelledAt: {
             type: "string",
             format: "date-time",
             nullable: true,
           },
+          cancelledById: { type: "string", nullable: true },
           cancelReason: { type: "string", nullable: true },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
@@ -1041,6 +1054,23 @@ export const openApiDocument = {
             schema: { $ref: "#/components/schemas/OrderPaymentStatus" },
           },
           {
+            name: "customerId",
+            in: "query",
+            description:
+              "Management filter. CUSTOMER users are always scoped to their own orders.",
+            schema: { type: "string" },
+          },
+          {
+            name: "from",
+            in: "query",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "to",
+            in: "query",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
             name: "limit",
             in: "query",
             schema: { type: "integer", minimum: 1, maximum: 100, default: 25 },
@@ -1151,7 +1181,7 @@ export const openApiDocument = {
         security: [{ bearerAuth: [] }],
         summary: "Cancel a customer order",
         description:
-          "CUSTOMER only. A customer may cancel only their own PENDING or CONFIRMED order. Inventory is not restored because this foundation slice does not reserve or decrement inventory at order creation.",
+          "Customers may cancel only their own PENDING or CONFIRMED orders. ADMIN and MANAGER may cancel customer orders through manage:orders. Inventory is not restored because customer orders do not reserve or decrement inventory in this slice.",
         parameters: [
           {
             name: "id",
@@ -1185,12 +1215,88 @@ export const openApiDocument = {
           },
           "400": { description: "Validation error" },
           "401": { description: "Authentication required" },
-          "403": { description: "Only CUSTOMER users can cancel orders" },
+          "403": { description: "Insufficient permission" },
           "404": { description: "Order not found" },
           "409": {
             description:
               "Order already cancelled or cannot be cancelled from its current state",
           },
+        },
+      },
+    },
+    "/orders/{id}/confirm": {
+      post: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "Confirm a customer order",
+        description:
+          "Requires manage:orders. Transitions PENDING orders to CONFIRMED. Does not mark the order paid, reserve inventory, decrement stock, create stock movements, or create a Sale.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Order confirmed",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Order" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Order not found" },
+          "409": { description: "Order cannot be confirmed from its state" },
+        },
+      },
+    },
+    "/orders/{id}/fulfill": {
+      post: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "Fulfill a customer order",
+        description:
+          "Requires manage:orders. Transitions CONFIRMED orders to FULFILLED. Does not process payments, reserve inventory, decrement stock, create stock movements, or create a Sale.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Order fulfilled",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Order" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Order not found" },
+          "409": { description: "Order cannot be fulfilled from its state" },
         },
       },
     },

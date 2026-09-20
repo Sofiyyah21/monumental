@@ -29,6 +29,18 @@ export function createOrderRoutes(
     validate({ params: orderIdParamSchema, body: cancelOrderSchema }),
     asyncHandler(controller.cancel),
   );
+  router.post(
+    "/:id/confirm",
+    authenticateRequest,
+    validate({ params: orderIdParamSchema }),
+    asyncHandler(controller.confirm),
+  );
+  router.post(
+    "/:id/fulfill",
+    authenticateRequest,
+    validate({ params: orderIdParamSchema }),
+    asyncHandler(controller.fulfill),
+  );
   router.get(
     "/:id",
     authenticateRequest,

@@ -28,6 +28,9 @@ export type ListOrdersInput = {
   requesterRole: UserRole;
   status?: OrderStatus;
   paymentStatus?: OrderPaymentStatus;
+  customerId?: string;
+  from?: string;
+  to?: string;
   limit?: number;
 };
 
@@ -40,6 +43,8 @@ export type GetOrderInput = {
 export type CancelOrderInput = GetOrderInput & {
   reason?: string;
 };
+
+export type OrderLifecycleInput = GetOrderInput;
 
 const orderInclude = {
   items: true,
@@ -191,6 +196,7 @@ export class OrderService {
         ...where,
         status: input.status,
         paymentStatus: input.paymentStatus,
+        createdAt: this.buildCreatedAtFilter(input),
       },
       include: orderInclude,
       orderBy: { createdAt: "desc" },
@@ -212,11 +218,14 @@ export class OrderService {
   }
 
   async cancel(input: CancelOrderInput) {
-    if (input.requesterRole !== UserRole.CUSTOMER) {
+    if (
+      input.requesterRole !== UserRole.CUSTOMER &&
+      !roleHasPermission(input.requesterRole, permissions.MANAGE_ORDERS)
+    ) {
       throw new AppError(
-        "Only customers can cancel their own orders",
+        "You do not have permission to manage customer orders",
         403,
-        "CUSTOMER_ORDER_REQUIRED",
+        "FORBIDDEN",
       );
     }
 
@@ -230,7 +239,7 @@ export class OrderService {
         include: orderInclude,
       });
 
-      if (!order || order.customerId !== input.requesterId) {
+      if (!order || !this.canCancelOrder(input, order.customerId)) {
         throw new AppError("Order not found", 404, "ORDER_NOT_FOUND");
       }
 
@@ -258,11 +267,40 @@ export class OrderService {
         data: {
           status: OrderStatus.CANCELLED,
           cancelledAt: new Date(),
+          cancelledById: input.requesterId,
           cancelReason: input.reason?.trim() || null,
         },
         include: orderInclude,
       });
     }, inventoryTransactionOptions);
+  }
+
+  async confirm(input: OrderLifecycleInput) {
+    this.assertCanManageOrders(input.requesterRole);
+    return this.transitionOrder(input, {
+      allowedFrom: [OrderStatus.PENDING],
+      conflictCode: "ORDER_NOT_CONFIRMABLE",
+      conflictMessage: "Order cannot be confirmed from its current state",
+      data: (now) => ({
+        status: OrderStatus.CONFIRMED,
+        confirmedAt: now,
+        confirmedById: input.requesterId,
+      }),
+    });
+  }
+
+  async fulfill(input: OrderLifecycleInput) {
+    this.assertCanManageOrders(input.requesterRole);
+    return this.transitionOrder(input, {
+      allowedFrom: [OrderStatus.CONFIRMED],
+      conflictCode: "ORDER_NOT_FULFILLABLE",
+      conflictMessage: "Order cannot be fulfilled from its current state",
+      data: (now) => ({
+        status: OrderStatus.FULFILLED,
+        fulfilledAt: now,
+        fulfilledById: input.requesterId,
+      }),
+    });
   }
 
   private buildReadableOrderWhere(input: ListOrdersInput) {
@@ -271,7 +309,7 @@ export class OrderService {
     }
 
     if (roleHasPermission(input.requesterRole, permissions.READ_ORDERS)) {
-      return {};
+      return input.customerId ? { customerId: input.customerId } : {};
     }
 
     throw new AppError(
@@ -287,6 +325,77 @@ export class OrderService {
         input.requesterId === customerId) ||
       roleHasPermission(input.requesterRole, permissions.READ_ORDERS)
     );
+  }
+
+  private canCancelOrder(input: CancelOrderInput, customerId: string) {
+    if (
+      input.requesterRole === UserRole.CUSTOMER &&
+      input.requesterId === customerId
+    ) {
+      return true;
+    }
+
+    return roleHasPermission(input.requesterRole, permissions.MANAGE_ORDERS);
+  }
+
+  private assertCanManageOrders(role: UserRole) {
+    if (!roleHasPermission(role, permissions.MANAGE_ORDERS)) {
+      throw new AppError(
+        "You do not have permission to manage customer orders",
+        403,
+        "FORBIDDEN",
+      );
+    }
+  }
+
+  private buildCreatedAtFilter(input: ListOrdersInput) {
+    if (!input.from && !input.to) {
+      return undefined;
+    }
+
+    return {
+      gte: input.from ? new Date(input.from) : undefined,
+      lte: input.to ? new Date(input.to) : undefined,
+    };
+  }
+
+  private async transitionOrder(
+    input: OrderLifecycleInput,
+    transition: {
+      allowedFrom: OrderStatus[];
+      conflictCode: string;
+      conflictMessage: string;
+      data(now: Date): Prisma.OrderUncheckedUpdateInput;
+    },
+  ) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
+      `;
+
+      const order = await tx.order.findUnique({
+        where: { id: input.orderId },
+        include: orderInclude,
+      });
+
+      if (!order) {
+        throw new AppError("Order not found", 404, "ORDER_NOT_FOUND");
+      }
+
+      if (!transition.allowedFrom.includes(order.status)) {
+        throw new AppError(
+          transition.conflictMessage,
+          409,
+          transition.conflictCode,
+        );
+      }
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: transition.data(new Date()),
+        include: orderInclude,
+      });
+    }, inventoryTransactionOptions);
   }
 
   private async generateOrderReference(

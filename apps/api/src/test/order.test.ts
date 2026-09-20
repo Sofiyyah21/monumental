@@ -343,6 +343,57 @@ describe("customer orders API", () => {
       .expect(400);
   });
 
+  it("allows management order listing filters without exposing other customers to customers", async () => {
+    const { app, db } = createOrderTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const customer = await createAuth(db, UserRole.CUSTOMER);
+    const otherCustomer = await createAuth(db, UserRole.CUSTOMER);
+    const manager = await createAuth(db, UserRole.MANAGER);
+
+    const firstOrder = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    const secondOrder = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", otherCustomer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+
+    const createdAt = new Date(firstOrder.body.data.createdAt);
+    const from = new Date(createdAt.getTime() - 1000).toISOString();
+    const to = new Date(createdAt.getTime() + 1000).toISOString();
+
+    const managerList = await request(app)
+      .get("/api/v1/orders")
+      .query({
+        customerId: otherCustomer.user.id,
+        from,
+        to,
+      })
+      .set("Authorization", manager.auth)
+      .expect(200);
+    expect(
+      managerList.body.data.map((order: { id: string }) => order.id),
+    ).toEqual([secondOrder.body.data.id]);
+
+    const customerList = await request(app)
+      .get("/api/v1/orders")
+      .query({ customerId: otherCustomer.user.id })
+      .set("Authorization", customer.auth)
+      .expect(200);
+    expect(
+      customerList.body.data.map((order: { id: string }) => order.id),
+    ).toEqual([firstOrder.body.data.id]);
+
+    await request(app)
+      .get("/api/v1/orders")
+      .query({ from: "2026-09-20", to: "2026-09-19" })
+      .set("Authorization", manager.auth)
+      .expect(400);
+  });
+
   it("preserves order item snapshots after product updates and creates unique references", async () => {
     const { app, db } = createOrderTestContext();
     const product = await createProduct(db, {
@@ -407,10 +458,9 @@ describe("customer orders API", () => {
       .send({ reason: "No auth" })
       .expect(401);
     await request(app)
-      .post(`/api/v1/orders/${orderResponse.body.data.id}/cancel`)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
       .set("Authorization", manager.auth)
-      .send({ reason: "Management cannot customer-cancel" })
-      .expect(403);
+      .expect(200);
     await request(app)
       .post("/api/v1/orders/%20/cancel")
       .set("Authorization", customer.auth)
@@ -434,6 +484,7 @@ describe("customer orders API", () => {
       cancelReason: "Changed my mind",
     });
     expect(cancelResponse.body.data.cancelledAt).toEqual(expect.any(String));
+    expect(cancelResponse.body.data.cancelledById).toBe(customer.user.id);
 
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/cancel`)
@@ -456,6 +507,205 @@ describe("customer orders API", () => {
       .set("Authorization", customer.auth)
       .send({ reason: "Fulfilled cannot cancel" })
       .expect(409);
+  });
+
+  it("enforces management authorization for confirmation and fulfillment", async () => {
+    const { app, db } = createOrderTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const customer = await createAuth(db, UserRole.CUSTOMER);
+    const staff = await createAuth(db, UserRole.STAFF);
+    const manager = await createAuth(db, UserRole.MANAGER);
+    const admin = await createAuth(db, UserRole.ADMIN);
+
+    const orderResponse = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .expect(401);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .set("Authorization", customer.auth)
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .set("Authorization", staff.auth)
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/cancel`)
+      .set("Authorization", staff.auth)
+      .send({ reason: "Staff cannot cancel" })
+      .expect(403);
+
+    const confirmResponse = await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+
+    expect(confirmResponse.body.data).toMatchObject({
+      status: OrderStatus.CONFIRMED,
+      confirmedById: manager.user.id,
+    });
+    expect(confirmResponse.body.data.confirmedAt).toEqual(expect.any(String));
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", customer.auth)
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", staff.auth)
+      .expect(403);
+
+    const fulfillResponse = await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", admin.auth)
+      .expect(200);
+
+    expect(fulfillResponse.body.data).toMatchObject({
+      status: OrderStatus.FULFILLED,
+      fulfilledById: admin.user.id,
+    });
+    expect(fulfillResponse.body.data.fulfilledAt).toEqual(expect.any(String));
+  });
+
+  it("enforces explicit order lifecycle transitions", async () => {
+    const { app, db } = createOrderTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const customer = await createAuth(db, UserRole.CUSTOMER);
+    const manager = await createAuth(db, UserRole.MANAGER);
+
+    const pendingOrder = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    const confirmedOrder = await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+    expect(confirmedOrder.body.data.status).toBe(OrderStatus.CONFIRMED);
+
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    const fulfilledOrder = await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+    expect(fulfilledOrder.body.data.status).toBe(OrderStatus.FULFILLED);
+
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/cancel`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Too late" })
+      .expect(409);
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    const cancelFromPending = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/orders/${cancelFromPending.body.data.id}/cancel`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Manager cancelled" })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${cancelFromPending.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+    await request(app)
+      .post(`/api/v1/orders/${cancelFromPending.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    const cancelFromConfirmed = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/orders/${cancelFromConfirmed.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+    const cancelledConfirmed = await request(app)
+      .post(`/api/v1/orders/${cancelFromConfirmed.body.data.id}/cancel`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Cannot supply" })
+      .expect(200);
+
+    expect(cancelledConfirmed.body.data).toMatchObject({
+      status: OrderStatus.CANCELLED,
+      cancelledById: manager.user.id,
+      cancelReason: "Cannot supply",
+    });
+  });
+
+  it("keeps management order operations from touching inventory or sales", async () => {
+    const { app, db, sales, stockMovements } = createOrderTestContext();
+    const product = await createProduct(db, { stock: 7 });
+    const customer = await createAuth(db, UserRole.CUSTOMER);
+    const manager = await createAuth(db, UserRole.MANAGER);
+
+    const orderResponse = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 2 }]))
+      .expect(201);
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+
+    const storedProduct = await db.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(Number(storedProduct.currentStock)).toBe(7);
+    expect(stockMovements.size).toBe(0);
+    expect(sales.size).toBe(0);
+
+    const cancellableOrder = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/orders/${cancellableOrder.body.data.id}/cancel`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "No stock reservation to restore" })
+      .expect(200);
+    expect(
+      Number(
+        (
+          await db.product.findUniqueOrThrow({
+            where: { id: product.id },
+          })
+        ).currentStock,
+      ),
+    ).toBe(7);
+    expect(stockMovements.size).toBe(0);
+    expect(sales.size).toBe(0);
   });
 
   it("keeps customers out of internal POS, inventory, and reporting APIs", async () => {
