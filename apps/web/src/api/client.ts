@@ -306,6 +306,18 @@ export class ApiClient {
     });
   }
 
+  async confirmOrder(id: string) {
+    return this.request<Order>(`/orders/${id}/confirm`, {
+      method: "POST",
+    });
+  }
+
+  async fulfillOrder(id: string) {
+    return this.request<Order>(`/orders/${id}/fulfill`, {
+      method: "POST",
+    });
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const response = await this.send(path, options);
 

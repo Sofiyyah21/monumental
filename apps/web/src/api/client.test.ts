@@ -543,9 +543,17 @@ describe("ApiClient", () => {
     await client.createOrder({
       items: [{ productId: "product_1", quantity: 2 }],
     });
-    await client.listOrders({ status: "PENDING", paymentStatus: "UNPAID" });
+    await client.listOrders({
+      status: "PENDING",
+      paymentStatus: "UNPAID",
+      customerId: "customer_1",
+      from: "2026-09-17",
+      to: "2026-09-20",
+    });
     await client.getOrder("order_1");
     await client.cancelOrder("order_1", { reason: "Changed plans" });
+    await client.confirmOrder("order_1");
+    await client.fulfillOrder("order_1");
 
     expect(requests[0]?.[0]).toBe("https://api.test/api/v1/orders");
     expect(requests[0]?.[1]).toEqual(
@@ -562,7 +570,7 @@ describe("ApiClient", () => {
     expect(createBody).not.toContain("customerId");
     expect(createBody).not.toContain("reference");
     expect(requests[1]?.[0]).toBe(
-      "https://api.test/api/v1/orders?status=PENDING&paymentStatus=UNPAID",
+      "https://api.test/api/v1/orders?status=PENDING&paymentStatus=UNPAID&customerId=customer_1&from=2026-09-17&to=2026-09-20",
     );
     expect(requests[2]?.[0]).toBe("https://api.test/api/v1/orders/order_1");
     expect(requests[3]?.[0]).toBe(
@@ -573,6 +581,18 @@ describe("ApiClient", () => {
         method: "POST",
         body: JSON.stringify({ reason: "Changed plans" }),
       }),
+    );
+    expect(requests[4]?.[0]).toBe(
+      "https://api.test/api/v1/orders/order_1/confirm",
+    );
+    expect(requests[4]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(requests[5]?.[0]).toBe(
+      "https://api.test/api/v1/orders/order_1/fulfill",
+    );
+    expect(requests[5]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
     );
   });
 });

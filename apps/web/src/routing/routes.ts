@@ -24,6 +24,8 @@ type RouteKey =
   | "cart"
   | "orders"
   | "orderDetail"
+  | "manageOrders"
+  | "manageOrderDetail"
   | "customer"
   | "forbidden";
 
@@ -80,6 +82,21 @@ export const routes: Record<RouteKey, AppRoute> = {
     description: "Persisted sale detail and receipt view.",
     requiresAuth: true,
     permission: permissions.READ_SALES,
+  },
+  manageOrders: {
+    path: "/orders/manage",
+    title: "Orders",
+    description: "Customer order operations workspace.",
+    navLabel: "Orders",
+    requiresAuth: true,
+    permission: permissions.MANAGE_ORDERS,
+  },
+  manageOrderDetail: {
+    path: "/orders/manage/:id",
+    title: "Order operations",
+    description: "Customer order lifecycle detail.",
+    requiresAuth: true,
+    permission: permissions.MANAGE_ORDERS,
   },
   reports: {
     path: "/reports",
@@ -181,6 +198,12 @@ export function findRoute(pathname: string) {
   }
   if (pathname.startsWith("/sales/") && pathname !== routes.salesHistory.path) {
     return routes.saleDetail;
+  }
+  if (
+    pathname.startsWith("/orders/manage/") &&
+    pathname !== routes.manageOrders.path
+  ) {
+    return routes.manageOrderDetail;
   }
   if (pathname.startsWith("/orders/")) {
     return routes.orderDetail;

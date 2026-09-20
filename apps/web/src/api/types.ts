@@ -21,6 +21,7 @@ export type Permission =
   | "create:sales"
   | "void:sales"
   | "read:orders"
+  | "manage:orders"
   | "read:reports"
   | "read:admin-dashboard";
 
@@ -171,13 +172,30 @@ export type OrderItem = {
   createdAt: string;
 };
 
+export type OrderUserSnapshot = {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: UserRole;
+};
+
 export type Order = {
   id: string;
   reference: string;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
   subtotal: string;
+  customerId?: string;
+  customer?: OrderUserSnapshot | null;
+  confirmedAt?: string | null;
+  confirmedById?: string | null;
+  confirmedBy?: OrderUserSnapshot | null;
+  fulfilledAt?: string | null;
+  fulfilledById?: string | null;
+  fulfilledBy?: OrderUserSnapshot | null;
   cancelledAt: string | null;
+  cancelledById?: string | null;
+  cancelledBy?: OrderUserSnapshot | null;
   cancelReason: string | null;
   createdAt: string;
   updatedAt: string;
@@ -194,6 +212,9 @@ export type CreateOrderInput = {
 export type OrderFilters = {
   status?: OrderStatus;
   paymentStatus?: OrderPaymentStatus;
+  customerId?: string;
+  from?: string;
+  to?: string;
   limit?: number;
 };
 

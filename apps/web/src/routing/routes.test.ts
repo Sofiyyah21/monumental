@@ -37,8 +37,11 @@ describe("route authorization", () => {
       "Inventory",
       "Sales",
       "Sales History",
+      "Orders",
       "Reports",
     ]);
+    expect(canAccessRoute(user("ADMIN"), routes.manageOrders)).toBe(true);
+    expect(canAccessRoute(user("ADMIN"), routes.manageOrderDetail)).toBe(true);
   });
 
   it("shows manager management areas without admin-only access", () => {
@@ -50,11 +53,14 @@ describe("route authorization", () => {
       "Inventory",
       "Sales",
       "Sales History",
+      "Orders",
       "Reports",
     ]);
     expect(canAccessRoute(manager, routes.products)).toBe(true);
     expect(canAccessRoute(manager, routes.inventory)).toBe(true);
     expect(canAccessRoute(manager, routes.reports)).toBe(true);
+    expect(canAccessRoute(manager, routes.manageOrders)).toBe(true);
+    expect(canAccessRoute(manager, routes.manageOrderDetail)).toBe(true);
     expect(canAccessRoute(manager, routes.admin)).toBe(false);
     expect(hasPermission(manager, permissions.MANAGE_PRODUCTS)).toBe(true);
     expect(hasPermission(manager, permissions.MANAGE_INVENTORY)).toBe(true);
@@ -69,6 +75,7 @@ describe("route authorization", () => {
     expect(canAccessRoute(staff, routes.products)).toBe(true);
     expect(canAccessRoute(staff, routes.inventory)).toBe(true);
     expect(canAccessRoute(staff, routes.reports)).toBe(false);
+    expect(canAccessRoute(staff, routes.manageOrders)).toBe(false);
     expect(canAccessRoute(staff, routes.admin)).toBe(false);
     expect(hasPermission(staff, permissions.READ_PRODUCTS)).toBe(true);
     expect(hasPermission(staff, permissions.MANAGE_PRODUCTS)).toBe(false);
@@ -88,6 +95,8 @@ describe("route authorization", () => {
     expect(canAccessRoute(customer, routes.cart)).toBe(true);
     expect(canAccessRoute(customer, routes.orders)).toBe(true);
     expect(canAccessRoute(customer, routes.orderDetail)).toBe(true);
+    expect(canAccessRoute(customer, routes.manageOrders)).toBe(false);
+    expect(canAccessRoute(customer, routes.manageOrderDetail)).toBe(false);
     expect(canAccessRoute(customer, routes.products)).toBe(false);
     expect(canAccessRoute(customer, routes.inventory)).toBe(false);
     expect(canAccessRoute(customer, routes.sales)).toBe(false);
@@ -108,6 +117,7 @@ describe("route authorization", () => {
     expect(canAccessRoute(user("ADMIN"), routes.orders)).toBe(false);
     expect(canAccessRoute(user("MANAGER"), routes.orders)).toBe(false);
     expect(canAccessRoute(user("STAFF"), routes.orders)).toBe(false);
+    expect(canAccessRoute(user("CUSTOMER"), routes.manageOrders)).toBe(false);
     expect(canAccessRoute(user("CUSTOMER"), routes.customer)).toBe(true);
   });
 
@@ -128,5 +138,7 @@ describe("route authorization", () => {
     expect(findRoute("/sales/sale_1")).toBe(routes.saleDetail);
     expect(findRoute("/orders")).toBe(routes.orders);
     expect(findRoute("/orders/order_1")).toBe(routes.orderDetail);
+    expect(findRoute("/orders/manage")).toBe(routes.manageOrders);
+    expect(findRoute("/orders/manage/order_1")).toBe(routes.manageOrderDetail);
   });
 });

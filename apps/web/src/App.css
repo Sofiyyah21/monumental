@@ -1703,6 +1703,102 @@
   font-size: 0.84rem;
 }
 
+.management-orders-grid,
+.management-order-detail-grid {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.management-order-filters {
+  align-items: end;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+}
+
+.management-order-filters label {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.management-order-filters input,
+.management-order-filters select {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  min-height: 2.75rem;
+  padding: 0 var(--space-3);
+}
+
+.management-order-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.management-order-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(12rem, 1fr) auto minmax(18rem, 1.4fr) auto;
+  padding: var(--space-4);
+}
+
+.management-order-row strong {
+  display: block;
+}
+
+.management-order-row span:not(.status-badge) {
+  color: var(--color-muted);
+  display: block;
+  font-size: 0.86rem;
+}
+
+.management-order-row > div:nth-child(2) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.management-order-row dl,
+.order-audit-grid {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.management-order-row dl {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.management-order-row dt,
+.order-audit-grid dt {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.management-order-row dd,
+.order-audit-grid dd {
+  margin: 0;
+}
+
+.order-audit-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.order-audit-wide {
+  grid-column: 1 / -1;
+}
+
+.order-operations-note {
+  border-left: 4px solid var(--color-brand);
+}
+
 @keyframes spin {
   to {
     transform: rotate(1turn);
@@ -1803,6 +1899,7 @@
   .receipt-meta,
   .shop-hero,
   .shop-filters,
+  .management-order-filters,
   .cart-hero,
   .cart-layout,
   .customer-cart-controls {
@@ -1927,6 +2024,16 @@
   }
 
   .shop-product-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .management-order-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .management-order-row dl,
+  .order-audit-grid {
     grid-template-columns: 1fr;
   }
 

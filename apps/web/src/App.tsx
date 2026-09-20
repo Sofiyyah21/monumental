@@ -12,6 +12,10 @@ import {
 import { ShopPage } from "./customer/ShopPage";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { InventoryPage } from "./inventory/InventoryPage";
+import {
+  ManagementOrderDetailPage,
+  ManagementOrdersPage,
+} from "./orders/ManagementOrdersPage";
 import { FoundationPage } from "./pages/FoundationPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -178,6 +182,28 @@ function AppRoutes() {
         <CustomerOrderDetailPage
           onBackToOrders={() => navigate(routes.orders.path)}
           onContinueShopping={() => navigate(routes.shop.path)}
+          orderId={orderId}
+        />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.manageOrders.path) {
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <ManagementOrdersPage
+          onOpenOrder={(id) => navigate(`/orders/manage/${id}`)}
+        />
+      </AppShell>
+    );
+  }
+
+  if (activeRoute.path === routes.manageOrderDetail.path) {
+    const orderId = decodeURIComponent(pathname.replace("/orders/manage/", ""));
+    return (
+      <AppShell activeRoute={activeRoute}>
+        <ManagementOrderDetailPage
+          onBackToOrders={() => navigate(routes.manageOrders.path)}
           orderId={orderId}
         />
       </AppShell>
