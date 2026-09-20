@@ -1,6 +1,8 @@
 import {
   OrderPaymentStatus,
   OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
   Prisma,
   UserRole,
 } from "@prisma/client";
@@ -11,6 +13,7 @@ import {
 import { AppError } from "../lib/app-error.js";
 import type { DatabaseClient } from "../lib/database.js";
 import { inventoryTransactionOptions } from "./inventory.service.js";
+import { createSaleInTransaction } from "./sale.service.js";
 
 type CreateOrderItemInput = {
   productId: string;
@@ -46,8 +49,13 @@ export type CancelOrderInput = GetOrderInput & {
 
 export type OrderLifecycleInput = GetOrderInput;
 
+export type VerifyOrderPaymentInput = OrderLifecycleInput & {
+  paymentMethod: PaymentMethod;
+};
+
 const orderInclude = {
   items: true,
+  sale: { select: { id: true, reference: true } },
 } satisfies Prisma.OrderInclude;
 
 export class OrderService {
@@ -299,28 +307,87 @@ export class OrderService {
 
   async fulfill(input: OrderLifecycleInput) {
     this.assertCanManageOrders(input.requesterRole);
-    return this.transitionOrder(input, {
-      allowedFrom: [OrderStatus.CONFIRMED],
-      conflictCode: "ORDER_NOT_FULFILLABLE",
-      conflictMessage: "Order cannot be fulfilled from its current state",
-      validate: (order) => {
-        if (order.paymentStatus !== OrderPaymentStatus.PAID) {
-          throw new AppError(
-            "Order payment must be verified before fulfillment",
-            409,
-            "ORDER_PAYMENT_REQUIRED",
-          );
-        }
-      },
-      data: (now) => ({
-        status: OrderStatus.FULFILLED,
-        fulfilledAt: now,
-        fulfilledById: input.requesterId,
-      }),
-    });
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
+      `;
+
+      const order = await tx.order.findUnique({
+        where: { id: input.orderId },
+        include: orderInclude,
+      });
+
+      if (!order) {
+        throw new AppError("Order not found", 404, "ORDER_NOT_FOUND");
+      }
+
+      if (order.status !== OrderStatus.CONFIRMED) {
+        throw new AppError(
+          "Order cannot be fulfilled from its current state",
+          409,
+          "ORDER_NOT_FULFILLABLE",
+        );
+      }
+
+      if (order.paymentStatus !== OrderPaymentStatus.PAID) {
+        throw new AppError(
+          "Order payment must be verified before fulfillment",
+          409,
+          "ORDER_PAYMENT_REQUIRED",
+        );
+      }
+
+      if (!order.paymentMethod) {
+        throw new AppError(
+          "Order payment method must be recorded before fulfillment",
+          409,
+          "ORDER_PAYMENT_METHOD_REQUIRED",
+        );
+      }
+
+      const existingSale = await tx.sale.findUnique({
+        where: { orderId: order.id },
+      });
+      if (existingSale) {
+        throw new AppError(
+          "Order has already been finalized into a sale",
+          409,
+          "ORDER_ALREADY_FINALIZED",
+        );
+      }
+
+      const fulfilledAt = new Date();
+      await createSaleInTransaction(tx, {
+        orderId: order.id,
+        sellerId: input.requesterId,
+        customerId: order.customerId,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: PaymentStatus.PAID,
+        discountAmount: 0,
+        soldAt: fulfilledAt,
+        requireActiveProducts: false,
+        items: order.items.map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          productUnit: item.productUnit,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      });
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.FULFILLED,
+          fulfilledAt,
+          fulfilledById: input.requesterId,
+        },
+        include: orderInclude,
+      });
+    }, inventoryTransactionOptions);
   }
 
-  async verifyPayment(input: OrderLifecycleInput) {
+  async verifyPayment(input: VerifyOrderPaymentInput) {
     this.assertCanManageOrders(input.requesterRole);
     return this.db.$transaction(async (tx) => {
       await tx.$queryRaw`
@@ -356,6 +423,7 @@ export class OrderService {
         where: { id: order.id },
         data: {
           paymentStatus: OrderPaymentStatus.PAID,
+          paymentMethod: input.paymentMethod,
           paidAt: new Date(),
           paidById: input.requesterId,
         },

@@ -73,6 +73,9 @@ const fulfilledOrder: Order = {
   },
   paidAt: "2026-09-20T10:30:00.000Z",
   paidById: "manager_1",
+  paymentMethod: "TRANSFER",
+  saleId: "sale_1",
+  saleReference: "MD-20260920-00001",
   fulfilledAt: "2026-09-20T11:00:00.000Z",
   fulfilledById: "admin_1",
   fulfilledBy: {
@@ -187,6 +190,10 @@ describe("ManagementOrderDetailView", () => {
     expect(html).toContain("Confirmed by");
     expect(html).toContain("Manager One");
     expect(html).toContain("Payment verified");
+    expect(html).toContain("Payment method");
+    expect(html).toContain("Transfer");
+    expect(html).toContain("Sale reference");
+    expect(html).toContain("MD-20260920-00001");
     expect(html).toContain("Payment verified by");
     expect(html).toContain("Fulfilled by");
     expect(html).toContain("Admin One");
@@ -265,8 +272,10 @@ describe("ManagementOrderDetailView", () => {
         loading
         onCancel={vi.fn()}
         onCancelReasonChange={vi.fn()}
+        onPaymentMethodChange={vi.fn()}
         onSubmit={vi.fn()}
         order={pendingOrder}
+        paymentMethod=""
       />,
     );
     const fulfillHtml = renderToStaticMarkup(
@@ -276,8 +285,10 @@ describe("ManagementOrderDetailView", () => {
         loading={false}
         onCancel={vi.fn()}
         onCancelReasonChange={vi.fn()}
+        onPaymentMethodChange={vi.fn()}
         onSubmit={vi.fn()}
         order={{ ...pendingOrder, status: "CONFIRMED" }}
+        paymentMethod=""
       />,
     );
     const paymentHtml = renderToStaticMarkup(
@@ -287,8 +298,10 @@ describe("ManagementOrderDetailView", () => {
         loading={false}
         onCancel={vi.fn()}
         onCancelReasonChange={vi.fn()}
+        onPaymentMethodChange={vi.fn()}
         onSubmit={vi.fn()}
         order={{ ...pendingOrder, status: "CONFIRMED" }}
+        paymentMethod="TRANSFER"
       />,
     );
     const cancelHtml = renderToStaticMarkup(
@@ -299,8 +312,10 @@ describe("ManagementOrderDetailView", () => {
         loading={false}
         onCancel={vi.fn()}
         onCancelReasonChange={vi.fn()}
+        onPaymentMethodChange={vi.fn()}
         onSubmit={vi.fn()}
         order={pendingOrder}
+        paymentMethod=""
       />,
     );
 
@@ -308,7 +323,9 @@ describe("ManagementOrderDetailView", () => {
     expect(confirmHtml).toContain("disabled");
     expect(paymentHtml).toContain("Verify Payment");
     expect(paymentHtml).toContain("manual management verification");
-    expect(fulfillHtml).toContain("does not decrement inventory");
+    expect(paymentHtml).toContain("Verified payment method");
+    expect(paymentHtml).toContain("Transfer");
+    expect(fulfillHtml).toContain("Finalize");
     expect(cancelHtml).toContain("Cancellation reason");
     expect(cancelHtml).toContain("Enter a cancellation reason.");
   });

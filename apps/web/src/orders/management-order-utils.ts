@@ -77,7 +77,7 @@ export function actionDescription(action: ManagementOrderAction, order: Order) {
     return `Confirm ${order.reference}. Payment status will not change and inventory will not be reserved.`;
   }
   if (action === "fulfill") {
-    return `Mark ${order.reference} as fulfilled. This does not decrement inventory, create stock movements, or create a Sale.`;
+    return `Finalize ${order.reference} as fulfilled. This creates the linked Sale, decrements inventory, and records SOLD stock movements.`;
   }
   if (action === "verifyPayment") {
     return `Confirm that payment for ${order.reference} has been received. This is manual management verification, not a bank or payment-provider check.`;

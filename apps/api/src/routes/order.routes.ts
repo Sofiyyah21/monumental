@@ -9,6 +9,7 @@ import {
   createOrderSchema,
   listOrdersQuerySchema,
   orderIdParamSchema,
+  verifyOrderPaymentSchema,
 } from "../validation/order.schema.js";
 
 export function createOrderRoutes(
@@ -44,7 +45,7 @@ export function createOrderRoutes(
   router.post(
     "/:id/payment/verify",
     authenticateRequest,
-    validate({ params: orderIdParamSchema }),
+    validate({ params: orderIdParamSchema, body: verifyOrderPaymentSchema }),
     asyncHandler(controller.verifyPayment),
   );
   router.get(

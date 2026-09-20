@@ -65,6 +65,7 @@ type ProductWhere = {
 type SaleRecord = {
   id: string;
   reference: string;
+  orderId: string | null;
   sellerId: string;
   customerId: string | null;
   status: SaleStatus;
@@ -101,6 +102,7 @@ type SaleItemRecord = {
 type SaleWhere = {
   id?: string;
   reference?: string;
+  orderId?: string;
   sellerId?: string;
   customerId?: string;
   status?: SaleStatus;
@@ -127,6 +129,7 @@ type OrderRecord = {
   customerId: string;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
+  paymentMethod: PaymentMethod | null;
   subtotal: Prisma.Decimal;
   confirmedAt: Date | null;
   confirmedById: string | null;
@@ -165,6 +168,11 @@ type OrderWhere = {
     gte?: Date;
     lte?: Date;
   };
+};
+
+type OrderInclude = {
+  items?: boolean;
+  sale?: { select?: { id?: true; reference?: true } };
 };
 
 type StockMovementRecord = {
@@ -383,6 +391,9 @@ export function createFakeDatabase() {
     if (where.reference && sale.reference !== where.reference) {
       return false;
     }
+    if (where.orderId && sale.orderId !== where.orderId) {
+      return false;
+    }
     if (where.sellerId && sale.sellerId !== where.sellerId) {
       return false;
     }
@@ -493,13 +504,27 @@ export function createFakeDatabase() {
 
   const includeOrderRelations = (
     order: OrderRecord,
-    include?: { items?: boolean },
+    include?: OrderInclude,
   ) => ({
     ...order,
     items: include?.items
       ? [...orderItems.values()]
           .filter((item) => item.orderId === order.id)
           .map((item) => ({ ...item }))
+      : undefined,
+    sale: include?.sale
+      ? (() => {
+          const sale = [...sales.values()].find(
+            (candidate) => candidate.orderId === order.id,
+          );
+          if (!sale) return null;
+          return {
+            id: include.sale.select?.id ? sale.id : undefined,
+            reference: include.sale.select?.reference
+              ? sale.reference
+              : undefined,
+          };
+        })()
       : undefined,
   });
 
@@ -845,6 +870,7 @@ export function createFakeDatabase() {
         data: {
           reference: string;
           sellerId: string;
+          orderId?: string;
           customerId?: string;
           status: SaleStatus;
           paymentMethod: PaymentMethod;
@@ -883,11 +909,20 @@ export function createFakeDatabase() {
         ) {
           throw uniqueConstraintError();
         }
+        if (
+          options.data.orderId &&
+          [...sales.values()].some(
+            (sale) => sale.orderId === options.data.orderId,
+          )
+        ) {
+          throw uniqueConstraintError();
+        }
 
         const now = new Date();
         const sale: SaleRecord = {
           id: `sale_${saleSequence}`,
           reference: options.data.reference,
+          orderId: options.data.orderId ?? null,
           sellerId: options.data.sellerId,
           customerId: options.data.customerId ?? null,
           status: options.data.status,
@@ -1069,7 +1104,7 @@ export function createFakeDatabase() {
     order: {
       async findMany(options?: {
         where?: OrderWhere;
-        include?: { items?: boolean };
+        include?: OrderInclude;
         take?: number;
       }) {
         return [...orders.values()]
@@ -1078,10 +1113,7 @@ export function createFakeDatabase() {
           .slice(0, options?.take)
           .map((order) => includeOrderRelations(order, options?.include));
       },
-      async findUnique(options: {
-        where: OrderWhere;
-        include?: { items?: boolean };
-      }) {
+      async findUnique(options: { where: OrderWhere; include?: OrderInclude }) {
         const order = [...orders.values()].find((candidate) =>
           matchesOrderWhere(candidate, options.where),
         );
@@ -1093,6 +1125,7 @@ export function createFakeDatabase() {
           customerId: string;
           status: OrderStatus;
           paymentStatus: OrderPaymentStatus;
+          paymentMethod?: PaymentMethod | null;
           subtotal: Prisma.Decimal;
           createdAt?: Date;
           items: {
@@ -1109,7 +1142,7 @@ export function createFakeDatabase() {
             }>;
           };
         };
-        include?: { items?: boolean };
+        include?: OrderInclude;
       }) {
         if (
           [...orders.values()].some(
@@ -1126,6 +1159,7 @@ export function createFakeDatabase() {
           customerId: options.data.customerId,
           status: options.data.status,
           paymentStatus: options.data.paymentStatus,
+          paymentMethod: options.data.paymentMethod ?? null,
           subtotal: options.data.subtotal,
           confirmedAt: null,
           confirmedById: null,
@@ -1160,6 +1194,7 @@ export function createFakeDatabase() {
         data: Partial<{
           status: OrderStatus;
           paymentStatus: OrderPaymentStatus;
+          paymentMethod: PaymentMethod | null;
           confirmedAt: Date;
           confirmedById: string | null;
           paidAt: Date;
@@ -1170,7 +1205,7 @@ export function createFakeDatabase() {
           cancelledById: string | null;
           cancelReason: string | null;
         }>;
-        include?: { items?: boolean };
+        include?: OrderInclude;
       }) {
         const order = [...orders.values()].find((candidate) =>
           matchesOrderWhere(candidate, options.where),
@@ -1183,6 +1218,10 @@ export function createFakeDatabase() {
           ...order,
           status: options.data.status ?? order.status,
           paymentStatus: options.data.paymentStatus ?? order.paymentStatus,
+          paymentMethod:
+            options.data.paymentMethod === undefined
+              ? order.paymentMethod
+              : options.data.paymentMethod,
           confirmedAt: options.data.confirmedAt ?? order.confirmedAt,
           confirmedById:
             options.data.confirmedById === undefined

@@ -1,4 +1,4 @@
-import { OrderPaymentStatus, OrderStatus } from "@prisma/client";
+import { OrderPaymentStatus, OrderStatus, PaymentMethod } from "@prisma/client";
 import { z } from "zod";
 import { paginationQuerySchema } from "./common.js";
 
@@ -82,6 +82,15 @@ export const cancelOrderSchema = z
     reason: z.string().trim().min(1).max(500).optional(),
   })
   .default({});
+
+export const verifyOrderPaymentSchema = z.object({
+  paymentMethod: z.enum([
+    PaymentMethod.CASH,
+    PaymentMethod.TRANSFER,
+    PaymentMethod.CARD,
+    PaymentMethod.OTHER,
+  ]),
+});
 
 function isValidOrderDate(value: string) {
   const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);

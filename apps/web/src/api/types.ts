@@ -184,6 +184,7 @@ export type Order = {
   reference: string;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
+  paymentMethod?: PaymentMethod | null;
   subtotal: string;
   customerId?: string;
   customer?: OrderUserSnapshot | null;
@@ -193,6 +194,8 @@ export type Order = {
   paidAt?: string | null;
   paidById?: string | null;
   paidBy?: OrderUserSnapshot | null;
+  saleId?: string | null;
+  saleReference?: string | null;
   fulfilledAt?: string | null;
   fulfilledById?: string | null;
   fulfilledBy?: OrderUserSnapshot | null;

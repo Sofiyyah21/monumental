@@ -253,6 +253,10 @@ export const openApiDocument = {
           reference: { type: "string", example: "MD-ORD-20260915-00001" },
           status: { $ref: "#/components/schemas/OrderStatus" },
           paymentStatus: { $ref: "#/components/schemas/OrderPaymentStatus" },
+          paymentMethod: {
+            allOf: [{ $ref: "#/components/schemas/PaymentMethod" }],
+            nullable: true,
+          },
           subtotal: { type: "string", example: "300.00" },
           confirmedAt: {
             type: "string",
@@ -270,6 +274,18 @@ export const openApiDocument = {
             nullable: true,
             description:
               "Management-visible verifier ID. Customer responses omit this field.",
+          },
+          saleId: {
+            type: "string",
+            nullable: true,
+            description:
+              "Management-visible Sale ID created by fulfillment. Customer responses omit this field.",
+          },
+          saleReference: {
+            type: "string",
+            nullable: true,
+            description:
+              "Management-visible Sale reference created by fulfillment. Customer responses omit this field.",
           },
           fulfilledAt: {
             type: "string",
@@ -1279,7 +1295,7 @@ export const openApiDocument = {
         security: [{ bearerAuth: [] }],
         summary: "Fulfill a customer order",
         description:
-          "Requires manage:orders. Transitions CONFIRMED + PAID orders to FULFILLED. Does not process payments, reserve inventory, decrement stock, create stock movements, or create a Sale.",
+          "Requires manage:orders. Atomically transitions CONFIRMED + PAID orders to FULFILLED, creates the linked Sale and SaleItems, decrements inventory, and creates SOLD stock movements. Does not process payment providers or refunds.",
         parameters: [
           {
             name: "id",
@@ -1320,7 +1336,7 @@ export const openApiDocument = {
         security: [{ bearerAuth: [] }],
         summary: "Manually verify customer order payment",
         description:
-          "Requires manage:orders. Transitions CONFIRMED + UNPAID orders to CONFIRMED + PAID and records paidAt/paidById from the authenticated management user. This is manual verification only; it does not call payment providers, fulfill orders, create Sales, or affect inventory.",
+          "Requires manage:orders. Transitions CONFIRMED + UNPAID orders to CONFIRMED + PAID and records paidAt, paidById, and the verified payment method from the authenticated management user. This is manual verification only; it does not call payment providers, fulfill orders, create Sales, or affect inventory.",
         parameters: [
           {
             name: "id",
@@ -1329,6 +1345,22 @@ export const openApiDocument = {
             schema: { type: "string" },
           },
         ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["paymentMethod"],
+                properties: {
+                  paymentMethod: {
+                    $ref: "#/components/schemas/PaymentMethod",
+                  },
+                },
+              },
+            },
+          },
+        },
         responses: {
           "200": {
             description: "Payment manually verified",

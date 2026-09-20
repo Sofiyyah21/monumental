@@ -3,13 +3,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   OrderPaymentStatus,
   OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
   Prisma,
   ProductCategory,
   ProductUnit,
+  StockMovementType,
   UserRole,
 } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { OrderService } from "../services/order.service.js";
+import { ReportService } from "../services/report.service.js";
 
 const runDatabaseTests = process.env.RUN_DATABASE_TESTS === "true";
 const describeDatabase = runDatabaseTests ? describe : describe.skip;
@@ -35,14 +39,41 @@ function uniqueSku(prefix: string) {
 }
 
 async function cleanupIntegrationOrders() {
+  await prisma.stockMovement.deleteMany({
+    where: {
+      OR: [
+        { product: { sku: { startsWith: testSkuPrefix } } },
+        { createdBy: { email: { endsWith: `@${testEmailDomain}` } } },
+      ],
+    },
+  });
+
+  await prisma.sale.deleteMany({
+    where: {
+      seller: {
+        email: { endsWith: `@${testEmailDomain}` },
+      },
+    },
+  });
+
   await prisma.order.deleteMany({
-    where: { customer: { email: { endsWith: `@${testEmailDomain}` } } },
+    where: {
+      customer: {
+        email: { endsWith: `@${testEmailDomain}` },
+      },
+    },
   });
+
   await prisma.product.deleteMany({
-    where: { sku: { startsWith: testSkuPrefix } },
+    where: {
+      sku: { startsWith: testSkuPrefix },
+    },
   });
+
   await prisma.user.deleteMany({
-    where: { email: { endsWith: `@${testEmailDomain}` } },
+    where: {
+      email: { endsWith: `@${testEmailDomain}` },
+    },
   });
 }
 
@@ -82,6 +113,7 @@ async function createProduct(input: {
 
 describeDatabase("database-backed customer order integration", () => {
   const orderService = new OrderService(prisma);
+  const reportService = new ReportService(prisma);
 
   beforeAll(async () => {
     assertSafeTestDatabase();
@@ -178,7 +210,7 @@ describeDatabase("database-backed customer order integration", () => {
     expect(storedProduct.currentStock.toNumber()).toBe(1);
   });
 
-  it("confirms and fulfills orders with audit metadata without touching inventory or sales", async () => {
+  it("finalizes confirmed paid orders into sales, sale items, and SOLD movements", async () => {
     const customer = await createCustomer();
     const manager = await createUser(UserRole.MANAGER);
     const product = await createProduct({ stock: 5 });
@@ -201,12 +233,14 @@ describeDatabase("database-backed customer order integration", () => {
 
     const paid = await orderService.verifyPayment({
       orderId: order.id,
+      paymentMethod: PaymentMethod.TRANSFER,
       requesterId: manager.id,
       requesterRole: UserRole.MANAGER,
     });
 
     expect(paid.status).toBe(OrderStatus.CONFIRMED);
     expect(paid.paymentStatus).toBe(OrderPaymentStatus.PAID);
+    expect(paid.paymentMethod).toBe(PaymentMethod.TRANSFER);
     expect(paid.paidById).toBe(manager.id);
     expect(paid.paidAt).toBeInstanceOf(Date);
 
@@ -223,14 +257,169 @@ describeDatabase("database-backed customer order integration", () => {
     const storedProduct = await prisma.product.findUniqueOrThrow({
       where: { id: product.id },
     });
-    const movementCount = await prisma.stockMovement.count({
-      where: { productId: product.id },
+    const sale = await prisma.sale.findUniqueOrThrow({
+      where: { orderId: order.id },
+      include: { items: true, stockMovements: true },
     });
-    const saleCount = await prisma.sale.count();
 
-    expect(storedProduct.currentStock.toNumber()).toBe(5);
-    expect(movementCount).toBe(0);
-    expect(saleCount).toBe(0);
+    expect(storedProduct.currentStock.toNumber()).toBe(3);
+    expect(sale.reference).toMatch(/^MD-\d{8}-\d{5}$/);
+    expect(sale).toMatchObject({
+      orderId: order.id,
+      sellerId: manager.id,
+      customerId: customer.id,
+      paymentMethod: PaymentMethod.TRANSFER,
+      paymentStatus: PaymentStatus.PAID,
+      status: "COMPLETED",
+    });
+    expect(sale.subtotal.toNumber()).toBe(300);
+    expect(sale.totalAmount.toNumber()).toBe(300);
+    expect(sale.totalCost.toNumber()).toBe(200);
+    expect(sale.grossProfit.toNumber()).toBe(100);
+    expect(sale.items).toHaveLength(1);
+    expect(sale.items[0]).toMatchObject({
+      productId: product.id,
+      productName: product.name,
+      productUnit: product.unit,
+    });
+    expect(sale.items[0]?.quantity.toNumber()).toBe(2);
+    expect(sale.items[0]?.unitPrice.toNumber()).toBe(150);
+    expect(sale.items[0]?.unitCost.toNumber()).toBe(100);
+    expect(sale.stockMovements).toHaveLength(1);
+    expect(sale.stockMovements[0]).toMatchObject({
+      type: StockMovementType.SOLD,
+      reference: sale.reference,
+      createdById: manager.id,
+    });
+    expect(sale.stockMovements[0]?.previousStock.toNumber()).toBe(5);
+    expect(sale.stockMovements[0]?.newStock.toNumber()).toBe(3);
+
+    await expect(
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await prisma.sale.count({ where: { orderId: order.id } })).toBe(1);
+  });
+
+  it("rolls back fulfillment when stock is no longer sufficient", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 2 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 2 }],
+    });
+    await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+    await orderService.verifyPayment({
+      orderId: order.id,
+      paymentMethod: PaymentMethod.CASH,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { currentStock: new Prisma.Decimal(1) },
+    });
+
+    await expect(
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409, code: "INSUFFICIENT_STOCK" });
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(storedOrder.status).toBe(OrderStatus.CONFIRMED);
+    expect(storedOrder.paymentStatus).toBe(OrderPaymentStatus.PAID);
+    expect(storedOrder.fulfilledAt).toBeNull();
+    expect(storedProduct.currentStock.toNumber()).toBe(1);
+    expect(await prisma.sale.count({ where: { orderId: order.id } })).toBe(0);
+    expect(
+      await prisma.stockMovement.count({ where: { productId: product.id } }),
+    ).toBe(0);
+  });
+
+  it("uses order price snapshots, current product cost, and completed sale reporting", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({
+      name: "Snapshot Fulfillment Drink",
+      stock: 5,
+      sellingPrice: 125,
+    });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 2 }],
+    });
+
+    await prisma.product.update({
+      where: { id: product.id },
+      data: {
+        name: "Renamed Fulfillment Drink",
+        sellingPrice: new Prisma.Decimal(200),
+        costPrice: new Prisma.Decimal(80),
+      },
+    });
+    await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+    await orderService.verifyPayment({
+      orderId: order.id,
+      paymentMethod: PaymentMethod.CARD,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+    const fulfilled = await orderService.fulfill({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    const sale = await prisma.sale.findUniqueOrThrow({
+      where: { orderId: order.id },
+      include: { items: true },
+    });
+    expect(fulfilled.sale?.reference).toBe(sale.reference);
+    expect(sale.items[0]?.productName).toBe("Snapshot Fulfillment Drink");
+    expect(sale.items[0]?.unitPrice.toNumber()).toBe(125);
+    expect(sale.items[0]?.unitCost.toNumber()).toBe(80);
+    expect(sale.totalAmount.toNumber()).toBe(250);
+    expect(sale.totalCost.toNumber()).toBe(160);
+    expect(sale.grossProfit.toNumber()).toBe(90);
+
+    const from = new Date(sale.soldAt.getTime() - 1000).toISOString();
+    const to = new Date(sale.soldAt.getTime() + 1000).toISOString();
+    const summary = await reportService.getCustomSalesSummary({ from, to });
+    const bestSellers = await reportService.getBestSellers({ from, to });
+    expect(summary.salesCount).toBe(1);
+    expect(summary.unitsSold.toNumber()).toBe(2);
+    expect(summary.revenue.toNumber()).toBe(250);
+    expect(summary.cogs.toNumber()).toBe(160);
+    expect(summary.grossProfit.toNumber()).toBe(90);
+    expect(bestSellers.products[0]).toMatchObject({
+      productId: product.id,
+      productName: "Snapshot Fulfillment Drink",
+    });
+    expect(bestSellers.products[0]?.quantitySold.toNumber()).toBe(2);
   });
 
   it("cancels confirmed orders with actor audit metadata and no inventory restoration", async () => {
@@ -290,18 +479,21 @@ describeDatabase("database-backed customer order integration", () => {
 
     const paidOrder = await orderService.verifyPayment({
       orderId: order.id,
+      paymentMethod: PaymentMethod.CASH,
       requesterId: manager.id,
       requesterRole: UserRole.MANAGER,
     });
 
     expect(paidOrder.status).toBe(OrderStatus.CONFIRMED);
     expect(paidOrder.paymentStatus).toBe(OrderPaymentStatus.PAID);
+    expect(paidOrder.paymentMethod).toBe(PaymentMethod.CASH);
     expect(paidOrder.paidById).toBe(manager.id);
     expect(paidOrder.paidAt).toBeInstanceOf(Date);
 
     await expect(
       orderService.verifyPayment({
         orderId: order.id,
+        paymentMethod: PaymentMethod.CASH,
         requesterId: manager.id,
         requesterRole: UserRole.MANAGER,
       }),
@@ -438,6 +630,69 @@ describeDatabase("database-backed customer order integration", () => {
     expect(await prisma.sale.count()).toBe(0);
   });
 
+  it("prevents concurrent fulfillment from creating duplicate sales or inventory decrements", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const admin = await createUser(UserRole.ADMIN);
+    const product = await createProduct({ stock: 6 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 2 }],
+    });
+    await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+    await orderService.verifyPayment({
+      orderId: order.id,
+      paymentMethod: PaymentMethod.TRANSFER,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    const results = await Promise.allSettled([
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+      orderService.fulfill({
+        orderId: order.id,
+        requesterId: admin.id,
+        requesterRole: UserRole.ADMIN,
+      }),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    const sale = await prisma.sale.findUniqueOrThrow({
+      where: { orderId: order.id },
+      include: { items: true, stockMovements: true },
+    });
+
+    expect(storedOrder.status).toBe(OrderStatus.FULFILLED);
+    expect(storedProduct.currentStock.toNumber()).toBe(4);
+    expect(await prisma.sale.count({ where: { orderId: order.id } })).toBe(1);
+    expect(sale.items).toHaveLength(1);
+    expect(sale.stockMovements).toHaveLength(1);
+    expect(sale.stockMovements[0]?.previousStock.toNumber()).toBe(6);
+    expect(sale.stockMovements[0]?.newStock.toNumber()).toBe(4);
+  });
+
   it("prevents concurrent payment verification from overwriting the first verifier", async () => {
     const customer = await createCustomer();
     const manager = await createUser(UserRole.MANAGER);
@@ -458,11 +713,13 @@ describeDatabase("database-backed customer order integration", () => {
     const verificationResults = await Promise.allSettled([
       orderService.verifyPayment({
         orderId: order.id,
+        paymentMethod: PaymentMethod.TRANSFER,
         requesterId: manager.id,
         requesterRole: UserRole.MANAGER,
       }),
       orderService.verifyPayment({
         orderId: order.id,
+        paymentMethod: PaymentMethod.CARD,
         requesterId: admin.id,
         requesterRole: UserRole.ADMIN,
       }),

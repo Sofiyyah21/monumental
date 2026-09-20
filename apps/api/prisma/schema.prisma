@@ -134,6 +134,7 @@ model Order {
   customerId    String
   status        OrderStatus        @default(PENDING)
   paymentStatus OrderPaymentStatus @default(UNPAID)
+  paymentMethod PaymentMethod?
   subtotal      Decimal            @db.Decimal(12, 2)
   confirmedAt   DateTime?
   confirmedById String?
@@ -153,6 +154,7 @@ model Order {
   fulfilledBy User? @relation("FulfilledOrders", fields: [fulfilledById], references: [id])
   cancelledBy User? @relation("CancelledOrders", fields: [cancelledById], references: [id])
   items       OrderItem[]
+  sale        Sale?
 
   @@index([customerId, createdAt])
   @@index([status, createdAt])
@@ -179,13 +181,13 @@ model OrderItem {
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
 
-  @@index([orderId])
   @@index([productId])
 }
 
 model Sale {
   id               String        @id @default(cuid())
   reference        String        @unique
+  orderId          String?       @unique
   sellerId         String
   customerId       String?
   status           SaleStatus    @default(COMPLETED)
@@ -206,6 +208,7 @@ model Sale {
 
   seller User  @relation("SellerSales", fields: [sellerId], references: [id])
   customer User? @relation("CustomerSales", fields: [customerId], references: [id])
+  order    Order? @relation(fields: [orderId], references: [id])
   voidedBy User? @relation("VoidedSales", fields: [voidedById], references: [id])
   items   SaleItem[]
   stockMovements StockMovement[]

@@ -1,6 +1,7 @@
 import type {
   OrderPaymentStatus,
   OrderStatus,
+  PaymentMethod,
   Prisma,
   ProductCategory,
   ProductUnit,
@@ -19,6 +20,7 @@ type OrderResponseSource = {
   reference: string;
   status: OrderStatus;
   paymentStatus: OrderPaymentStatus;
+  paymentMethod: PaymentMethod | null;
   subtotal: Prisma.Decimal;
   confirmedAt: Date | null;
   confirmedById: string | null;
@@ -43,6 +45,7 @@ type OrderResponseSource = {
     lineSubtotal: Prisma.Decimal;
     createdAt: Date;
   }>;
+  sale?: { id: string; reference: string } | null;
 };
 
 export class OrderController {
@@ -120,6 +123,7 @@ export class OrderController {
       orderId: req.params.id,
       requesterId: user.id,
       requesterRole: user.role,
+      paymentMethod: req.body.paymentMethod,
     });
     res.json({ success: true, data: toOrderResponse(result, user.role) });
   };
@@ -143,11 +147,18 @@ function toOrderResponse(order: OrderResponseSource, requesterRole: UserRole) {
     reference: order.reference,
     status: order.status,
     paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod,
     subtotal: order.subtotal,
     confirmedAt: order.confirmedAt,
     confirmedById: order.confirmedById,
     paidAt: order.paidAt,
     ...(includeInternalPaymentAudit ? { paidById: order.paidById } : {}),
+    ...(includeInternalPaymentAudit
+      ? {
+          saleId: order.sale?.id ?? null,
+          saleReference: order.sale?.reference ?? null,
+        }
+      : {}),
     fulfilledAt: order.fulfilledAt,
     fulfilledById: order.fulfilledById,
     cancelledAt: order.cancelledAt,

@@ -14,6 +14,7 @@ import type {
   InventoryMutationResult,
   LowStockReportItem,
   Product,
+  PaymentMethod,
   ProductFilters,
   ProductInput,
   ProductUpdateInput,
@@ -318,9 +319,13 @@ export class ApiClient {
     });
   }
 
-  async verifyOrderPayment(id: string) {
+  async verifyOrderPayment(
+    id: string,
+    input: { paymentMethod: PaymentMethod },
+  ) {
     return this.request<Order>(`/orders/${id}/payment/verify`, {
       method: "POST",
+      body: JSON.stringify(input),
     });
   }
 

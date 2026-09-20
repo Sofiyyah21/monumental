@@ -1,8 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { ApiError, apiClient } from "../api/client";
-import type { Order, OrderPaymentStatus, OrderStatus } from "../api/types";
+import type {
+  Order,
+  OrderPaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+} from "../api/types";
 import { Alert, EmptyState, LoadingState } from "../components/Feedback";
 import { formatMoney, productUnitLabels } from "../products/product-utils";
+import { paymentMethodLabels, paymentMethods } from "../sales/pos-utils";
 import {
   formatOrderDate,
   formatOrderQuantity,
@@ -65,6 +71,7 @@ export function ManagementOrderDetailPage({
   const [dialogAction, setDialogAction] =
     useState<ManagementOrderAction | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [formError, setFormError] = useState<string | null>(null);
   const [mutation, setMutation] = useState<MutationState>({
     error: null,
@@ -81,6 +88,10 @@ export function ManagementOrderDetailPage({
         return;
       }
     }
+    if (dialogAction === "verifyPayment" && !paymentMethod) {
+      setFormError("Select the payment method that was manually verified.");
+      return;
+    }
 
     setFormError(null);
     setMutation({ error: null, loading: true, message: null });
@@ -89,10 +100,12 @@ export function ManagementOrderDetailPage({
         order.id,
         dialogAction,
         cancelReason,
+        paymentMethod,
       );
       setOrder(updatedOrder);
       setDialogAction(null);
       setCancelReason("");
+      setPaymentMethod("");
       setMutation({
         error: null,
         loading: false,
@@ -122,19 +135,26 @@ export function ManagementOrderDetailPage({
       onBackToOrders={onBackToOrders}
       onCancelDialog={() => {
         setDialogAction(null);
+        setPaymentMethod("");
         setFormError(null);
       }}
       onCancelReasonChange={(reason) => {
         setCancelReason(reason);
         if (formError) setFormError(null);
       }}
+      onPaymentMethodChange={(method) => {
+        setPaymentMethod(method);
+        if (formError) setFormError(null);
+      }}
       onOpenAction={(action) => {
         setDialogAction(action);
+        setPaymentMethod("");
         setFormError(null);
         setMutation({ error: null, loading: false, message: null });
       }}
       onSubmitAction={() => void submitAction()}
       order={order}
+      paymentMethod={paymentMethod}
     />
   );
 }
@@ -143,12 +163,16 @@ async function runOrderAction(
   orderId: string,
   action: ManagementOrderAction,
   reason: string,
+  paymentMethod: PaymentMethod | "",
 ) {
   if (action === "confirm") {
     return apiClient.confirmOrder(orderId);
   }
   if (action === "verifyPayment") {
-    return apiClient.verifyOrderPayment(orderId);
+    if (!paymentMethod) {
+      throw new Error("Payment method is required");
+    }
+    return apiClient.verifyOrderPayment(orderId, { paymentMethod });
   }
   if (action === "fulfill") {
     return apiClient.fulfillOrder(orderId);
@@ -377,8 +401,10 @@ export function ManagementOrderDetailView({
   onCancelDialog = () => undefined,
   onCancelReasonChange = () => undefined,
   onOpenAction = () => undefined,
+  onPaymentMethodChange = () => undefined,
   onSubmitAction = () => undefined,
   order,
+  paymentMethod = "",
 }: {
   cancelReason?: string;
   dialogAction?: ManagementOrderAction | null;
@@ -390,8 +416,10 @@ export function ManagementOrderDetailView({
   onCancelDialog?: () => void;
   onCancelReasonChange?: (reason: string) => void;
   onOpenAction?: (action: ManagementOrderAction) => void;
+  onPaymentMethodChange?: (method: PaymentMethod | "") => void;
   onSubmitAction?: () => void;
   order: Order | null;
+  paymentMethod?: PaymentMethod | "";
 }) {
   if (loading) {
     return <LoadingState message="Loading order detail" />;
@@ -478,8 +506,8 @@ export function ManagementOrderDetailView({
         <p className="eyebrow">Operational boundary</p>
         <p>
           Payment verification is manual management acknowledgement only.
-          Fulfillment here does not decrement inventory, create stock movements,
-          process providers, or create a Sale.
+          Fulfillment finalizes the paid order into a Sale and inventory
+          movement; it still does not process payment providers.
         </p>
       </section>
 
@@ -501,8 +529,10 @@ export function ManagementOrderDetailView({
           loading={mutation.loading}
           onCancel={onCancelDialog}
           onCancelReasonChange={onCancelReasonChange}
+          onPaymentMethodChange={onPaymentMethodChange}
           onSubmit={onSubmitAction}
           order={order}
+          paymentMethod={paymentMethod}
         />
       ) : null}
     </div>
@@ -546,11 +576,23 @@ function OrderAuditSummary({ order }: { order: Order }) {
             <dt>Payment verified</dt>
             <dd>{formatOrderDate(order.paidAt)}</dd>
           </div>
+          {order.paymentMethod ? (
+            <div>
+              <dt>Payment method</dt>
+              <dd>{paymentMethodLabels[order.paymentMethod]}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>Payment verified by</dt>
             <dd>{formatOrderActor(order.paidBy, order.paidById)}</dd>
           </div>
         </>
+      ) : null}
+      {order.saleReference ? (
+        <div>
+          <dt>Sale reference</dt>
+          <dd>{order.saleReference}</dd>
+        </div>
       ) : null}
       {order.fulfilledAt ? (
         <>
@@ -639,8 +681,10 @@ export function OrderActionDialog({
   loading,
   onCancel,
   onCancelReasonChange,
+  onPaymentMethodChange,
   onSubmit,
   order,
+  paymentMethod,
 }: {
   action: ManagementOrderAction;
   cancelReason: string;
@@ -648,8 +692,10 @@ export function OrderActionDialog({
   loading: boolean;
   onCancel(): void;
   onCancelReasonChange(reason: string): void;
+  onPaymentMethodChange(method: PaymentMethod | ""): void;
   onSubmit(): void;
   order: Order;
+  paymentMethod: PaymentMethod | "";
 }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -677,6 +723,25 @@ export function OrderActionDialog({
               rows={4}
               value={cancelReason}
             />
+          </label>
+        ) : null}
+        {action === "verifyPayment" ? (
+          <label>
+            <span>Verified payment method</span>
+            <select
+              aria-describedby={formError ? "order-action-error" : undefined}
+              onChange={(event) =>
+                onPaymentMethodChange(event.target.value as PaymentMethod | "")
+              }
+              value={paymentMethod}
+            >
+              <option value="">Select method</option>
+              {paymentMethods.map((method) => (
+                <option key={method} value={method}>
+                  {paymentMethodLabels[method]}
+                </option>
+              ))}
+            </select>
           </label>
         ) : null}
         {formError ? (

@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 import {
   OrderPaymentStatus,
   OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
   Prisma,
   ProductCategory,
   ProductUnit,
+  StockMovementType,
   UserRole,
 } from "@prisma/client";
 import { createApp } from "../app.js";
@@ -567,6 +570,7 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", admin.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(200);
 
     const fulfillResponse = await request(app)
@@ -616,6 +620,7 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${pendingOrder.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.CARD })
       .expect(200);
 
     const fulfilledOrder = await request(app)
@@ -695,14 +700,17 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", customer.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(403);
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", staff.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(403);
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(409);
 
     await request(app)
@@ -716,12 +724,14 @@ describe("customer orders API", () => {
       .send({
         amount: 1,
         paidById: customer.user.id,
+        paymentMethod: PaymentMethod.TRANSFER,
         paymentStatus: OrderPaymentStatus.FAILED,
       })
       .expect(200);
 
     expect(verifyResponse.body.data).toMatchObject({
       status: OrderStatus.CONFIRMED,
+      paymentMethod: PaymentMethod.TRANSFER,
       paymentStatus: OrderPaymentStatus.PAID,
       paidById: admin.user.id,
     });
@@ -730,6 +740,7 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(409);
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/cancel`)
@@ -743,6 +754,7 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(409);
 
     const customerDetail = await request(app)
@@ -767,6 +779,7 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${cancelledOrder.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(409);
 
     const failedPaymentOrder = await request(app)
@@ -784,11 +797,13 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${failedPaymentOrder.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.TRANSFER })
       .expect(409);
   });
 
-  it("keeps management order operations from touching inventory or sales", async () => {
-    const { app, db, sales, stockMovements } = createOrderTestContext();
+  it("finalizes fulfilled orders into sales and inventory movements only at fulfillment", async () => {
+    const { app, db, saleItems, sales, stockMovements } =
+      createOrderTestContext();
     const product = await createProduct(db, { stock: 7 });
     const customer = await createAuth(db, UserRole.CUSTOMER);
     const manager = await createAuth(db, UserRole.MANAGER);
@@ -806,18 +821,63 @@ describe("customer orders API", () => {
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
+      .send({ paymentMethod: PaymentMethod.CASH })
       .expect(200);
-    await request(app)
+
+    expect(sales.size).toBe(0);
+    expect(stockMovements.size).toBe(0);
+
+    const fulfillResponse = await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
       .set("Authorization", manager.auth)
       .expect(200);
+    expect(fulfillResponse.body.data).toMatchObject({
+      status: OrderStatus.FULFILLED,
+      saleReference: expect.stringMatching(/^MD-\d{8}-\d{5}$/),
+    });
 
     const storedProduct = await db.product.findUniqueOrThrow({
       where: { id: product.id },
     });
-    expect(Number(storedProduct.currentStock)).toBe(7);
-    expect(stockMovements.size).toBe(0);
-    expect(sales.size).toBe(0);
+    expect(Number(storedProduct.currentStock)).toBe(5);
+    expect(sales.size).toBe(1);
+    expect(saleItems.size).toBe(1);
+    expect(stockMovements.size).toBe(1);
+    const [sale] = [...sales.values()];
+    const [saleItem] = [...saleItems.values()];
+    const [movement] = [...stockMovements.values()];
+    expect(sale).toMatchObject({
+      orderId: orderResponse.body.data.id,
+      customerId: customer.user.id,
+      sellerId: manager.user.id,
+      paymentMethod: PaymentMethod.CASH,
+      paymentStatus: PaymentStatus.PAID,
+    });
+    expect(Number(sale?.subtotal)).toBe(300);
+    expect(Number(sale?.totalCost)).toBe(200);
+    expect(Number(sale?.grossProfit)).toBe(100);
+    expect(saleItem).toMatchObject({
+      saleId: sale?.id,
+      productName: product.name,
+      productUnit: product.unit,
+    });
+    expect(Number(saleItem?.unitPrice)).toBe(150);
+    expect(Number(saleItem?.unitCost)).toBe(100);
+    expect(movement).toMatchObject({
+      saleId: sale?.id,
+      type: StockMovementType.SOLD,
+      reference: sale?.reference,
+      createdById: manager.user.id,
+    });
+    expect(Number(movement?.previousStock)).toBe(7);
+    expect(Number(movement?.newStock)).toBe(5);
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+    expect(sales.size).toBe(1);
+    expect(stockMovements.size).toBe(1);
 
     const cancellableOrder = await request(app)
       .post("/api/v1/orders")
@@ -837,9 +897,9 @@ describe("customer orders API", () => {
           })
         ).currentStock,
       ),
-    ).toBe(7);
-    expect(stockMovements.size).toBe(0);
-    expect(sales.size).toBe(0);
+    ).toBe(5);
+    expect(stockMovements.size).toBe(1);
+    expect(sales.size).toBe(1);
   });
 
   it("keeps customers out of internal POS, inventory, and reporting APIs", async () => {
