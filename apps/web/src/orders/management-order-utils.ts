@@ -23,7 +23,8 @@ export type ManagementOrderFilters = {
   to: string;
 };
 
-export type ManagementOrderAction = "confirm" | "fulfill" | "cancel";
+export type ManagementOrderAction =
+  "confirm" | "verifyPayment" | "fulfill" | "cancel";
 
 export const defaultManagementOrderFilters: ManagementOrderFilters = {
   status: "",
@@ -49,19 +50,24 @@ export function isManagementOrderCancellable(order: Pick<Order, "status">) {
 }
 
 export function getAvailableOrderActions(
-  order: Pick<Order, "status">,
+  order: Pick<Order, "paymentStatus" | "status">,
 ): ManagementOrderAction[] {
   if (order.status === "PENDING") {
     return ["confirm", "cancel"];
   }
   if (order.status === "CONFIRMED") {
-    return ["fulfill", "cancel"];
+    return order.paymentStatus === "UNPAID"
+      ? ["verifyPayment", "cancel"]
+      : order.paymentStatus === "PAID"
+        ? ["fulfill"]
+        : [];
   }
   return [];
 }
 
 export function actionLabel(action: ManagementOrderAction) {
   if (action === "confirm") return "Confirm Order";
+  if (action === "verifyPayment") return "Verify Payment";
   if (action === "fulfill") return "Mark as Fulfilled";
   return "Cancel Order";
 }
@@ -72,6 +78,9 @@ export function actionDescription(action: ManagementOrderAction, order: Order) {
   }
   if (action === "fulfill") {
     return `Mark ${order.reference} as fulfilled. This does not decrement inventory, create stock movements, or create a Sale.`;
+  }
+  if (action === "verifyPayment") {
+    return `Confirm that payment for ${order.reference} has been received. This is manual management verification, not a bank or payment-provider check.`;
   }
   return `Cancel ${order.reference}. This does not restore inventory because customer orders do not reserve stock.`;
 }

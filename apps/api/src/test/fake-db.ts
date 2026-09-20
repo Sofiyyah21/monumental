@@ -130,6 +130,8 @@ type OrderRecord = {
   subtotal: Prisma.Decimal;
   confirmedAt: Date | null;
   confirmedById: string | null;
+  paidAt: Date | null;
+  paidById: string | null;
   fulfilledAt: Date | null;
   fulfilledById: string | null;
   cancelledAt: Date | null;
@@ -1127,6 +1129,8 @@ export function createFakeDatabase() {
           subtotal: options.data.subtotal,
           confirmedAt: null,
           confirmedById: null,
+          paidAt: null,
+          paidById: null,
           fulfilledAt: null,
           fulfilledById: null,
           cancelledAt: null,
@@ -1158,6 +1162,8 @@ export function createFakeDatabase() {
           paymentStatus: OrderPaymentStatus;
           confirmedAt: Date;
           confirmedById: string | null;
+          paidAt: Date;
+          paidById: string | null;
           fulfilledAt: Date;
           fulfilledById: string | null;
           cancelledAt: Date;
@@ -1182,6 +1188,11 @@ export function createFakeDatabase() {
             options.data.confirmedById === undefined
               ? order.confirmedById
               : options.data.confirmedById,
+          paidAt: options.data.paidAt ?? order.paidAt,
+          paidById:
+            options.data.paidById === undefined
+              ? order.paidById
+              : options.data.paidById,
           fulfilledAt: options.data.fulfilledAt ?? order.fulfilledAt,
           fulfilledById:
             options.data.fulfilledById === undefined

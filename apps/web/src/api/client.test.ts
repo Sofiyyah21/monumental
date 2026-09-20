@@ -553,6 +553,7 @@ describe("ApiClient", () => {
     await client.getOrder("order_1");
     await client.cancelOrder("order_1", { reason: "Changed plans" });
     await client.confirmOrder("order_1");
+    await client.verifyOrderPayment("order_1");
     await client.fulfillOrder("order_1");
 
     expect(requests[0]?.[0]).toBe("https://api.test/api/v1/orders");
@@ -589,9 +590,15 @@ describe("ApiClient", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(requests[5]?.[0]).toBe(
-      "https://api.test/api/v1/orders/order_1/fulfill",
+      "https://api.test/api/v1/orders/order_1/payment/verify",
     );
     expect(requests[5]?.[1]).toEqual(
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(requests[6]?.[0]).toBe(
+      "https://api.test/api/v1/orders/order_1/fulfill",
+    );
+    expect(requests[6]?.[1]).toEqual(
       expect.objectContaining({ method: "POST" }),
     );
   });

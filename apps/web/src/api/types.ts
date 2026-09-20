@@ -190,6 +190,9 @@ export type Order = {
   confirmedAt?: string | null;
   confirmedById?: string | null;
   confirmedBy?: OrderUserSnapshot | null;
+  paidAt?: string | null;
+  paidById?: string | null;
+  paidBy?: OrderUserSnapshot | null;
   fulfilledAt?: string | null;
   fulfilledById?: string | null;
   fulfilledBy?: OrderUserSnapshot | null;

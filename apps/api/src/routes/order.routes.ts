@@ -41,6 +41,12 @@ export function createOrderRoutes(
     validate({ params: orderIdParamSchema }),
     asyncHandler(controller.fulfill),
   );
+  router.post(
+    "/:id/payment/verify",
+    authenticateRequest,
+    validate({ params: orderIdParamSchema }),
+    asyncHandler(controller.verifyPayment),
+  );
   router.get(
     "/:id",
     authenticateRequest,

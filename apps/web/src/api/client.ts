@@ -318,6 +318,12 @@ export class ApiClient {
     });
   }
 
+  async verifyOrderPayment(id: string) {
+    return this.request<Order>(`/orders/${id}/payment/verify`, {
+      method: "POST",
+    });
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const response = await this.send(path, options);
 

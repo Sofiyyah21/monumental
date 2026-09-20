@@ -71,6 +71,8 @@ const fulfilledOrder: Order = {
     email: "manager@example.com",
     role: "MANAGER",
   },
+  paidAt: "2026-09-20T10:30:00.000Z",
+  paidById: "manager_1",
   fulfilledAt: "2026-09-20T11:00:00.000Z",
   fulfilledById: "admin_1",
   fulfilledBy: {
@@ -184,6 +186,8 @@ describe("ManagementOrderDetailView", () => {
     expect(html).toContain("Customer One");
     expect(html).toContain("Confirmed by");
     expect(html).toContain("Manager One");
+    expect(html).toContain("Payment verified");
+    expect(html).toContain("Payment verified by");
     expect(html).toContain("Fulfilled by");
     expect(html).toContain("Admin One");
     expect(html).toContain("Snapshot Noodles");
@@ -221,19 +225,39 @@ describe("ManagementOrderDetailView", () => {
   });
 
   it("shows only valid lifecycle actions for each state", () => {
-    expect(getAvailableOrderActions({ status: "PENDING" })).toEqual([
-      "confirm",
-      "cancel",
-    ]);
-    expect(getAvailableOrderActions({ status: "CONFIRMED" })).toEqual([
-      "fulfill",
-      "cancel",
-    ]);
-    expect(getAvailableOrderActions({ status: "FULFILLED" })).toEqual([]);
-    expect(getAvailableOrderActions({ status: "CANCELLED" })).toEqual([]);
+    expect(
+      getAvailableOrderActions({ paymentStatus: "UNPAID", status: "PENDING" }),
+    ).toEqual(["confirm", "cancel"]);
+    expect(
+      getAvailableOrderActions({
+        paymentStatus: "UNPAID",
+        status: "CONFIRMED",
+      }),
+    ).toEqual(["verifyPayment", "cancel"]);
+    expect(
+      getAvailableOrderActions({
+        paymentStatus: "PAID",
+        status: "CONFIRMED",
+      }),
+    ).toEqual(["fulfill"]);
+    expect(
+      getAvailableOrderActions({
+        paymentStatus: "FAILED",
+        status: "CONFIRMED",
+      }),
+    ).toEqual([]);
+    expect(
+      getAvailableOrderActions({ paymentStatus: "PAID", status: "FULFILLED" }),
+    ).toEqual([]);
+    expect(
+      getAvailableOrderActions({
+        paymentStatus: "UNPAID",
+        status: "CANCELLED",
+      }),
+    ).toEqual([]);
   });
 
-  it("renders confirmation, fulfillment, and cancellation dialogs", () => {
+  it("renders confirmation, payment, fulfillment, and cancellation dialogs", () => {
     const confirmHtml = renderToStaticMarkup(
       <OrderActionDialog
         action="confirm"
@@ -248,6 +272,17 @@ describe("ManagementOrderDetailView", () => {
     const fulfillHtml = renderToStaticMarkup(
       <OrderActionDialog
         action="fulfill"
+        cancelReason=""
+        loading={false}
+        onCancel={vi.fn()}
+        onCancelReasonChange={vi.fn()}
+        onSubmit={vi.fn()}
+        order={{ ...pendingOrder, status: "CONFIRMED" }}
+      />,
+    );
+    const paymentHtml = renderToStaticMarkup(
+      <OrderActionDialog
+        action="verifyPayment"
         cancelReason=""
         loading={false}
         onCancel={vi.fn()}
@@ -271,6 +306,8 @@ describe("ManagementOrderDetailView", () => {
 
     expect(confirmHtml).toContain("Confirm Order");
     expect(confirmHtml).toContain("disabled");
+    expect(paymentHtml).toContain("Verify Payment");
+    expect(paymentHtml).toContain("manual management verification");
     expect(fulfillHtml).toContain("does not decrement inventory");
     expect(cancelHtml).toContain("Cancellation reason");
     expect(cancelHtml).toContain("Enter a cancellation reason.");

@@ -4,8 +4,13 @@ import type {
   Prisma,
   ProductCategory,
   ProductUnit,
+  UserRole,
 } from "@prisma/client";
 import type { Request, Response } from "express";
+import {
+  permissions,
+  roleHasPermission,
+} from "../authorization/permissions.js";
 import { AppError } from "../lib/app-error.js";
 import { OrderService } from "../services/order.service.js";
 
@@ -17,6 +22,8 @@ type OrderResponseSource = {
   subtotal: Prisma.Decimal;
   confirmedAt: Date | null;
   confirmedById: string | null;
+  paidAt: Date | null;
+  paidById: string | null;
   fulfilledAt: Date | null;
   fulfilledById: string | null;
   cancelledAt: Date | null;
@@ -48,7 +55,10 @@ export class OrderController {
       requesterId: user.id,
       requesterRole: user.role,
     });
-    res.json({ success: true, data: result.map(toOrderResponse) });
+    res.json({
+      success: true,
+      data: result.map((order) => toOrderResponse(order, user.role)),
+    });
   };
 
   getById = async (req: Request<{ id: string }>, res: Response) => {
@@ -58,7 +68,7 @@ export class OrderController {
       requesterId: user.id,
       requesterRole: user.role,
     });
-    res.json({ success: true, data: toOrderResponse(result) });
+    res.json({ success: true, data: toOrderResponse(result, user.role) });
   };
 
   create = async (req: Request, res: Response) => {
@@ -68,7 +78,9 @@ export class OrderController {
       requesterRole: user.role,
       items: req.body.items,
     });
-    res.status(201).json({ success: true, data: toOrderResponse(result) });
+    res
+      .status(201)
+      .json({ success: true, data: toOrderResponse(result, user.role) });
   };
 
   cancel = async (req: Request<{ id: string }>, res: Response) => {
@@ -79,7 +91,7 @@ export class OrderController {
       requesterRole: user.role,
       reason: req.body.reason,
     });
-    res.json({ success: true, data: toOrderResponse(result) });
+    res.json({ success: true, data: toOrderResponse(result, user.role) });
   };
 
   confirm = async (req: Request<{ id: string }>, res: Response) => {
@@ -89,7 +101,7 @@ export class OrderController {
       requesterId: user.id,
       requesterRole: user.role,
     });
-    res.json({ success: true, data: toOrderResponse(result) });
+    res.json({ success: true, data: toOrderResponse(result, user.role) });
   };
 
   fulfill = async (req: Request<{ id: string }>, res: Response) => {
@@ -99,7 +111,17 @@ export class OrderController {
       requesterId: user.id,
       requesterRole: user.role,
     });
-    res.json({ success: true, data: toOrderResponse(result) });
+    res.json({ success: true, data: toOrderResponse(result, user.role) });
+  };
+
+  verifyPayment = async (req: Request<{ id: string }>, res: Response) => {
+    const user = this.requireUser(req);
+    const result = await this.orderService.verifyPayment({
+      orderId: req.params.id,
+      requesterId: user.id,
+      requesterRole: user.role,
+    });
+    res.json({ success: true, data: toOrderResponse(result, user.role) });
   };
 
   private requireUser(req: Request) {
@@ -110,7 +132,12 @@ export class OrderController {
   }
 }
 
-function toOrderResponse(order: OrderResponseSource) {
+function toOrderResponse(order: OrderResponseSource, requesterRole: UserRole) {
+  const includeInternalPaymentAudit = roleHasPermission(
+    requesterRole,
+    permissions.READ_ORDERS,
+  );
+
   return {
     id: order.id,
     reference: order.reference,
@@ -119,6 +146,8 @@ function toOrderResponse(order: OrderResponseSource) {
     subtotal: order.subtotal,
     confirmedAt: order.confirmedAt,
     confirmedById: order.confirmedById,
+    paidAt: order.paidAt,
+    ...(includeInternalPaymentAudit ? { paidById: order.paidById } : {}),
     fulfilledAt: order.fulfilledAt,
     fulfilledById: order.fulfilledById,
     cancelledAt: order.cancelledAt,

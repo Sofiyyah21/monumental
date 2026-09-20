@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  OrderPaymentStatus,
   OrderStatus,
   Prisma,
   ProductCategory,
@@ -198,6 +199,17 @@ describeDatabase("database-backed customer order integration", () => {
     expect(confirmed.confirmedById).toBe(manager.id);
     expect(confirmed.confirmedAt).toBeInstanceOf(Date);
 
+    const paid = await orderService.verifyPayment({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    expect(paid.status).toBe(OrderStatus.CONFIRMED);
+    expect(paid.paymentStatus).toBe(OrderPaymentStatus.PAID);
+    expect(paid.paidById).toBe(manager.id);
+    expect(paid.paidAt).toBeInstanceOf(Date);
+
     const fulfilled = await orderService.fulfill({
       orderId: order.id,
       requesterId: manager.id,
@@ -254,6 +266,65 @@ describeDatabase("database-backed customer order integration", () => {
       where: { id: product.id },
     });
     expect(storedProduct.currentStock.toNumber()).toBe(4);
+    expect(
+      await prisma.stockMovement.count({ where: { productId: product.id } }),
+    ).toBe(0);
+    expect(await prisma.sale.count()).toBe(0);
+  });
+
+  it("verifies confirmed unpaid orders with payment audit metadata and no side effects", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const product = await createProduct({ stock: 5 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 2 }],
+    });
+    await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    const paidOrder = await orderService.verifyPayment({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    expect(paidOrder.status).toBe(OrderStatus.CONFIRMED);
+    expect(paidOrder.paymentStatus).toBe(OrderPaymentStatus.PAID);
+    expect(paidOrder.paidById).toBe(manager.id);
+    expect(paidOrder.paidAt).toBeInstanceOf(Date);
+
+    await expect(
+      orderService.verifyPayment({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "ORDER_PAYMENT_ALREADY_PROCESSED",
+    });
+    await expect(
+      orderService.cancel({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+        reason: "No refund workflow",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "ORDER_PAID_NOT_CANCELLABLE",
+    });
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(storedProduct.currentStock.toNumber()).toBe(5);
     expect(
       await prisma.stockMovement.count({ where: { productId: product.id } }),
     ).toBe(0);
@@ -356,6 +427,60 @@ describeDatabase("database-backed customer order integration", () => {
     expect([OrderStatus.FULFILLED, OrderStatus.CANCELLED]).toContain(
       storedOrder.status,
     );
+
+    const storedProduct = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+    });
+    expect(storedProduct.currentStock.toNumber()).toBe(6);
+    expect(
+      await prisma.stockMovement.count({ where: { productId: product.id } }),
+    ).toBe(0);
+    expect(await prisma.sale.count()).toBe(0);
+  });
+
+  it("prevents concurrent payment verification from overwriting the first verifier", async () => {
+    const customer = await createCustomer();
+    const manager = await createUser(UserRole.MANAGER);
+    const admin = await createUser(UserRole.ADMIN);
+    const product = await createProduct({ stock: 6 });
+
+    const order = await orderService.create({
+      customerId: customer.id,
+      requesterRole: UserRole.CUSTOMER,
+      items: [{ productId: product.id, quantity: 1 }],
+    });
+    await orderService.confirm({
+      orderId: order.id,
+      requesterId: manager.id,
+      requesterRole: UserRole.MANAGER,
+    });
+
+    const verificationResults = await Promise.allSettled([
+      orderService.verifyPayment({
+        orderId: order.id,
+        requesterId: manager.id,
+        requesterRole: UserRole.MANAGER,
+      }),
+      orderService.verifyPayment({
+        orderId: order.id,
+        requesterId: admin.id,
+        requesterRole: UserRole.ADMIN,
+      }),
+    ]);
+
+    expect(
+      verificationResults.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      verificationResults.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+
+    const storedOrder = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(storedOrder.paymentStatus).toBe(OrderPaymentStatus.PAID);
+    expect(storedOrder.paidAt).toBeInstanceOf(Date);
+    expect([manager.id, admin.id]).toContain(storedOrder.paidById);
 
     const storedProduct = await prisma.product.findUniqueOrThrow({
       where: { id: product.id },

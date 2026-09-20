@@ -262,6 +262,14 @@ export class OrderService {
         );
       }
 
+      if (order.paymentStatus === OrderPaymentStatus.PAID) {
+        throw new AppError(
+          "Paid orders cannot be cancelled without a refund workflow",
+          409,
+          "ORDER_PAID_NOT_CANCELLABLE",
+        );
+      }
+
       return tx.order.update({
         where: { id: order.id },
         data: {
@@ -295,12 +303,65 @@ export class OrderService {
       allowedFrom: [OrderStatus.CONFIRMED],
       conflictCode: "ORDER_NOT_FULFILLABLE",
       conflictMessage: "Order cannot be fulfilled from its current state",
+      validate: (order) => {
+        if (order.paymentStatus !== OrderPaymentStatus.PAID) {
+          throw new AppError(
+            "Order payment must be verified before fulfillment",
+            409,
+            "ORDER_PAYMENT_REQUIRED",
+          );
+        }
+      },
       data: (now) => ({
         status: OrderStatus.FULFILLED,
         fulfilledAt: now,
         fulfilledById: input.requesterId,
       }),
     });
+  }
+
+  async verifyPayment(input: OrderLifecycleInput) {
+    this.assertCanManageOrders(input.requesterRole);
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
+      `;
+
+      const order = await tx.order.findUnique({
+        where: { id: input.orderId },
+        include: orderInclude,
+      });
+
+      if (!order) {
+        throw new AppError("Order not found", 404, "ORDER_NOT_FOUND");
+      }
+
+      if (order.status !== OrderStatus.CONFIRMED) {
+        throw new AppError(
+          "Payment can only be verified for confirmed orders",
+          409,
+          "ORDER_PAYMENT_NOT_VERIFIABLE",
+        );
+      }
+
+      if (order.paymentStatus !== OrderPaymentStatus.UNPAID) {
+        throw new AppError(
+          "Payment has already been processed for this order",
+          409,
+          "ORDER_PAYMENT_ALREADY_PROCESSED",
+        );
+      }
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: OrderPaymentStatus.PAID,
+          paidAt: new Date(),
+          paidById: input.requesterId,
+        },
+        include: orderInclude,
+      });
+    }, inventoryTransactionOptions);
   }
 
   private buildReadableOrderWhere(input: ListOrdersInput) {
@@ -365,6 +426,7 @@ export class OrderService {
       allowedFrom: OrderStatus[];
       conflictCode: string;
       conflictMessage: string;
+      validate?(order: { paymentStatus: OrderPaymentStatus }): void;
       data(now: Date): Prisma.OrderUncheckedUpdateInput;
     },
   ) {
@@ -389,6 +451,7 @@ export class OrderService {
           transition.conflictCode,
         );
       }
+      transition.validate?.(order);
 
       return tx.order.update({
         where: { id: order.id },

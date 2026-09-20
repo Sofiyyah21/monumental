@@ -85,6 +85,7 @@ model User {
   confirmedOrders Order[]       @relation("ConfirmedOrders")
   fulfilledOrders Order[]       @relation("FulfilledOrders")
   cancelledOrders Order[]       @relation("CancelledOrders")
+  paidOrders      Order[]       @relation("PaidOrders")
 
   @@index([role, active])
 }
@@ -136,6 +137,8 @@ model Order {
   subtotal      Decimal            @db.Decimal(12, 2)
   confirmedAt   DateTime?
   confirmedById String?
+  paidAt        DateTime?
+  paidById      String?
   fulfilledAt   DateTime?
   fulfilledById String?
   cancelledAt   DateTime?
@@ -146,6 +149,7 @@ model Order {
 
   customer    User  @relation(fields: [customerId], references: [id])
   confirmedBy User? @relation("ConfirmedOrders", fields: [confirmedById], references: [id])
+  paidBy      User? @relation("PaidOrders", fields: [paidById], references: [id])
   fulfilledBy User? @relation("FulfilledOrders", fields: [fulfilledById], references: [id])
   cancelledBy User? @relation("CancelledOrders", fields: [cancelledById], references: [id])
   items       OrderItem[]
@@ -154,6 +158,7 @@ model Order {
   @@index([status, createdAt])
   @@index([paymentStatus, createdAt])
   @@index([confirmedById, confirmedAt])
+  @@index([paidById, paidAt])
   @@index([fulfilledById, fulfilledAt])
   @@index([cancelledById, cancelledAt])
 }

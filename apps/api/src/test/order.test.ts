@@ -560,6 +560,15 @@ describe("customer orders API", () => {
       .set("Authorization", staff.auth)
       .expect(403);
 
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", admin.auth)
+      .expect(409);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", admin.auth)
+      .expect(200);
+
     const fulfillResponse = await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
       .set("Authorization", admin.auth)
@@ -599,6 +608,15 @@ describe("customer orders API", () => {
       .post(`/api/v1/orders/${pendingOrder.body.data.id}/confirm`)
       .set("Authorization", manager.auth)
       .expect(409);
+
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+    await request(app)
+      .post(`/api/v1/orders/${pendingOrder.body.data.id}/payment/verify`)
+      .set("Authorization", manager.auth)
+      .expect(200);
 
     const fulfilledOrder = await request(app)
       .post(`/api/v1/orders/${pendingOrder.body.data.id}/fulfill`)
@@ -657,6 +675,118 @@ describe("customer orders API", () => {
     });
   });
 
+  it("verifies payment only for confirmed unpaid orders with management authorization", async () => {
+    const { app, db } = createOrderTestContext();
+    const product = await createProduct(db, { stock: 10 });
+    const customer = await createAuth(db, UserRole.CUSTOMER);
+    const staff = await createAuth(db, UserRole.STAFF);
+    const manager = await createAuth(db, UserRole.MANAGER);
+    const admin = await createAuth(db, UserRole.ADMIN);
+
+    const orderResponse = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .expect(401);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", customer.auth)
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", staff.auth)
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+
+    const verifyResponse = await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", admin.auth)
+      .send({
+        amount: 1,
+        paidById: customer.user.id,
+        paymentStatus: OrderPaymentStatus.FAILED,
+      })
+      .expect(200);
+
+    expect(verifyResponse.body.data).toMatchObject({
+      status: OrderStatus.CONFIRMED,
+      paymentStatus: OrderPaymentStatus.PAID,
+      paidById: admin.user.id,
+    });
+    expect(verifyResponse.body.data.paidAt).toEqual(expect.any(String));
+
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/cancel`)
+      .set("Authorization", manager.auth)
+      .send({ reason: "Paid order needs refund workflow" })
+      .expect(409);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/fulfill`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    const customerDetail = await request(app)
+      .get(`/api/v1/orders/${orderResponse.body.data.id}`)
+      .set("Authorization", customer.auth)
+      .expect(200);
+    expect(customerDetail.body.data.paymentStatus).toBe(
+      OrderPaymentStatus.PAID,
+    );
+    expect(customerDetail.body.data.paidAt).toEqual(expect.any(String));
+    expect(customerDetail.body.data.paidById).toBeUndefined();
+
+    const cancelledOrder = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    await db.order.update({
+      where: { id: cancelledOrder.body.data.id },
+      data: { status: OrderStatus.CANCELLED },
+    });
+    await request(app)
+      .post(`/api/v1/orders/${cancelledOrder.body.data.id}/payment/verify`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+
+    const failedPaymentOrder = await request(app)
+      .post("/api/v1/orders")
+      .set("Authorization", customer.auth)
+      .send(createOrderPayload([{ productId: product.id, quantity: 1 }]))
+      .expect(201);
+    await db.order.update({
+      where: { id: failedPaymentOrder.body.data.id },
+      data: {
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: OrderPaymentStatus.FAILED,
+      },
+    });
+    await request(app)
+      .post(`/api/v1/orders/${failedPaymentOrder.body.data.id}/payment/verify`)
+      .set("Authorization", manager.auth)
+      .expect(409);
+  });
+
   it("keeps management order operations from touching inventory or sales", async () => {
     const { app, db, sales, stockMovements } = createOrderTestContext();
     const product = await createProduct(db, { stock: 7 });
@@ -671,6 +801,10 @@ describe("customer orders API", () => {
 
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/confirm`)
+      .set("Authorization", manager.auth)
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/orders/${orderResponse.body.data.id}/payment/verify`)
       .set("Authorization", manager.auth)
       .expect(200);
     await request(app)

@@ -147,6 +147,9 @@ async function runOrderAction(
   if (action === "confirm") {
     return apiClient.confirmOrder(orderId);
   }
+  if (action === "verifyPayment") {
+    return apiClient.verifyOrderPayment(orderId);
+  }
   if (action === "fulfill") {
     return apiClient.fulfillOrder(orderId);
   }
@@ -433,7 +436,7 @@ export function ManagementOrderDetailView({
           </div>
           <p>
             Lifecycle actions update only the customer order state. Payment,
-            inventory, and sales finalization are separate workflows.
+            inventory, and sales finalization remain separate workflows.
           </p>
         </div>
         <div className="sale-detail-actions">
@@ -474,8 +477,9 @@ export function ManagementOrderDetailView({
       <section className="panel order-operations-note">
         <p className="eyebrow">Operational boundary</p>
         <p>
+          Payment verification is manual management acknowledgement only.
           Fulfillment here does not decrement inventory, create stock movements,
-          process payment, or create a Sale.
+          process providers, or create a Sale.
         </p>
       </section>
 
@@ -533,6 +537,18 @@ function OrderAuditSummary({ order }: { order: Order }) {
           <div>
             <dt>Confirmed by</dt>
             <dd>{formatOrderActor(order.confirmedBy, order.confirmedById)}</dd>
+          </div>
+        </>
+      ) : null}
+      {order.paidAt ? (
+        <>
+          <div>
+            <dt>Payment verified</dt>
+            <dd>{formatOrderDate(order.paidAt)}</dd>
+          </div>
+          <div>
+            <dt>Payment verified by</dt>
+            <dd>{formatOrderActor(order.paidBy, order.paidById)}</dd>
           </div>
         </>
       ) : null}

@@ -260,6 +260,17 @@ export const openApiDocument = {
             nullable: true,
           },
           confirmedById: { type: "string", nullable: true },
+          paidAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          paidById: {
+            type: "string",
+            nullable: true,
+            description:
+              "Management-visible verifier ID. Customer responses omit this field.",
+          },
           fulfilledAt: {
             type: "string",
             format: "date-time",
@@ -1219,7 +1230,7 @@ export const openApiDocument = {
           "404": { description: "Order not found" },
           "409": {
             description:
-              "Order already cancelled or cannot be cancelled from its current state",
+              "Order already cancelled, paid, or cannot be cancelled from its current state",
           },
         },
       },
@@ -1268,7 +1279,7 @@ export const openApiDocument = {
         security: [{ bearerAuth: [] }],
         summary: "Fulfill a customer order",
         description:
-          "Requires manage:orders. Transitions CONFIRMED orders to FULFILLED. Does not process payments, reserve inventory, decrement stock, create stock movements, or create a Sale.",
+          "Requires manage:orders. Transitions CONFIRMED + PAID orders to FULFILLED. Does not process payments, reserve inventory, decrement stock, create stock movements, or create a Sale.",
         parameters: [
           {
             name: "id",
@@ -1296,7 +1307,51 @@ export const openApiDocument = {
           "401": { description: "Authentication required" },
           "403": { description: "Insufficient permission" },
           "404": { description: "Order not found" },
-          "409": { description: "Order cannot be fulfilled from its state" },
+          "409": {
+            description:
+              "Order cannot be fulfilled from its state or payment has not been verified",
+          },
+        },
+      },
+    },
+    "/orders/{id}/payment/verify": {
+      post: {
+        tags: ["Orders"],
+        security: [{ bearerAuth: [] }],
+        summary: "Manually verify customer order payment",
+        description:
+          "Requires manage:orders. Transitions CONFIRMED + UNPAID orders to CONFIRMED + PAID and records paidAt/paidById from the authenticated management user. This is manual verification only; it does not call payment providers, fulfill orders, create Sales, or affect inventory.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Payment manually verified",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/Order" },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "Validation error" },
+          "401": { description: "Authentication required" },
+          "403": { description: "Insufficient permission" },
+          "404": { description: "Order not found" },
+          "409": {
+            description:
+              "Order is not CONFIRMED + UNPAID or payment was already processed",
+          },
         },
       },
     },
