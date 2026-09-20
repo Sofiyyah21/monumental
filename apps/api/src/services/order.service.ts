@@ -13,6 +13,10 @@ import {
 import { AppError } from "../lib/app-error.js";
 import type { DatabaseClient } from "../lib/database.js";
 import { inventoryTransactionOptions } from "./inventory.service.js";
+import {
+  createNotificationService,
+  type NotificationService,
+} from "./notification.service.js";
 import { createSaleInTransaction } from "./sale.service.js";
 
 type CreateOrderItemInput = {
@@ -59,7 +63,10 @@ const orderInclude = {
 } satisfies Prisma.OrderInclude;
 
 export class OrderService {
-  constructor(private readonly db: DatabaseClient) {}
+  constructor(
+    private readonly db: DatabaseClient,
+    private readonly notifications: NotificationService = createNotificationService(),
+  ) {}
 
   async create(input: CreateOrderInput) {
     if (input.requesterRole !== UserRole.CUSTOMER) {
@@ -96,7 +103,7 @@ export class OrderService {
       }
     }
 
-    return this.db.$transaction(async (tx) => {
+    const order = await this.db.$transaction(async (tx) => {
       const now = new Date();
       const productIds = input.items.map((item) => item.productId);
       const sortedProductIds = [...productIds].sort();
@@ -194,6 +201,9 @@ export class OrderService {
         include: orderInclude,
       });
     }, inventoryTransactionOptions);
+
+    await this.notifications.notifyOrderCreated(order);
+    return order;
   }
 
   async list(input: ListOrdersInput) {
@@ -237,7 +247,7 @@ export class OrderService {
       );
     }
 
-    return this.db.$transaction(async (tx) => {
+    const order = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`
         SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
       `;
@@ -289,11 +299,14 @@ export class OrderService {
         include: orderInclude,
       });
     }, inventoryTransactionOptions);
+
+    await this.notifications.notifyOrderCancelled(order);
+    return order;
   }
 
   async confirm(input: OrderLifecycleInput) {
     this.assertCanManageOrders(input.requesterRole);
-    return this.transitionOrder(input, {
+    const order = await this.transitionOrder(input, {
       allowedFrom: [OrderStatus.PENDING],
       conflictCode: "ORDER_NOT_CONFIRMABLE",
       conflictMessage: "Order cannot be confirmed from its current state",
@@ -303,11 +316,14 @@ export class OrderService {
         confirmedById: input.requesterId,
       }),
     });
+
+    await this.notifications.notifyOrderConfirmed(order);
+    return order;
   }
 
   async fulfill(input: OrderLifecycleInput) {
     this.assertCanManageOrders(input.requesterRole);
-    return this.db.$transaction(async (tx) => {
+    const order = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`
         SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
       `;
@@ -385,11 +401,14 @@ export class OrderService {
         include: orderInclude,
       });
     }, inventoryTransactionOptions);
+
+    await this.notifications.notifyOrderFulfilled(order);
+    return order;
   }
 
   async verifyPayment(input: VerifyOrderPaymentInput) {
     this.assertCanManageOrders(input.requesterRole);
-    return this.db.$transaction(async (tx) => {
+    const order = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`
         SELECT "id" FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE
       `;
@@ -430,6 +449,9 @@ export class OrderService {
         include: orderInclude,
       });
     }, inventoryTransactionOptions);
+
+    await this.notifications.notifyPaymentVerified(order);
+    return order;
   }
 
   private buildReadableOrderWhere(input: ListOrdersInput) {
