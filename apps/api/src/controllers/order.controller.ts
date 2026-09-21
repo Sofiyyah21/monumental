@@ -150,7 +150,9 @@ function toOrderResponse(order: OrderResponseSource, requesterRole: UserRole) {
     paymentMethod: order.paymentMethod,
     subtotal: order.subtotal,
     confirmedAt: order.confirmedAt,
-    confirmedById: order.confirmedById,
+    ...(includeInternalPaymentAudit
+      ? { confirmedById: order.confirmedById }
+      : {}),
     paidAt: order.paidAt,
     ...(includeInternalPaymentAudit ? { paidById: order.paidById } : {}),
     ...(includeInternalPaymentAudit
@@ -160,9 +162,13 @@ function toOrderResponse(order: OrderResponseSource, requesterRole: UserRole) {
         }
       : {}),
     fulfilledAt: order.fulfilledAt,
-    fulfilledById: order.fulfilledById,
+    ...(includeInternalPaymentAudit
+      ? { fulfilledById: order.fulfilledById }
+      : {}),
     cancelledAt: order.cancelledAt,
-    cancelledById: order.cancelledById,
+    ...(includeInternalPaymentAudit
+      ? { cancelledById: order.cancelledById }
+      : {}),
     cancelReason: order.cancelReason,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,

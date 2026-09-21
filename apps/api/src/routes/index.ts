@@ -14,6 +14,10 @@ import { ReportService } from "../services/report.service.js";
 import { SaleService } from "../services/sale.service.js";
 import { prisma } from "../lib/prisma.js";
 import type { DatabaseClient } from "../lib/database.js";
+import {
+  createNotificationService,
+  type NotificationProvider,
+} from "../services/notification.service.js";
 import { createAuthenticate } from "../middleware/auth.js";
 import { createAuthRoutes } from "./auth.routes.js";
 import { createInventoryRoutes } from "./inventory.routes.js";
@@ -22,14 +26,26 @@ import { createProductRoutes } from "./product.routes.js";
 import { createReportRoutes } from "./report.routes.js";
 import { createSaleRoutes } from "./sale.routes.js";
 
-export function createApiRouter(db: DatabaseClient = prisma) {
+export type ApiRouterOptions = {
+  notificationProvider?: NotificationProvider;
+};
+
+export function createApiRouter(
+  db: DatabaseClient = prisma,
+  options: ApiRouterOptions = {},
+) {
   const router = Router();
   const authenticateRequest = createAuthenticate(db);
+  const notificationService = createNotificationService(
+    options.notificationProvider,
+  );
 
   const authController = new AuthController(new AuthService(db));
   const productController = new ProductController(new ProductService(db));
   const inventoryController = new InventoryController(new InventoryService(db));
-  const orderController = new OrderController(new OrderService(db));
+  const orderController = new OrderController(
+    new OrderService(db, notificationService),
+  );
   const saleController = new SaleController(new SaleService(db));
   const reportController = new ReportController(new ReportService(db));
 

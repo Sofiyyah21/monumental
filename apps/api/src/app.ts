@@ -7,9 +7,14 @@ import type { DatabaseClient } from "./lib/database.js";
 import { prisma } from "./lib/prisma.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { notFoundHandler } from "./middleware/not-found.js";
-import { createApiRouter } from "./routes/index.js";
+import { createApiRouter, type ApiRouterOptions } from "./routes/index.js";
 
-export function createApp(db: DatabaseClient = prisma) {
+export type AppOptions = ApiRouterOptions;
+
+export function createApp(
+  db: DatabaseClient = prisma,
+  options: AppOptions = {},
+) {
   const app = express();
   const env = getEnv();
 
@@ -17,7 +22,7 @@ export function createApp(db: DatabaseClient = prisma) {
   app.use(express.json());
 
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
-  app.use("/api/v1", createApiRouter(db));
+  app.use("/api/v1", createApiRouter(db, options));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

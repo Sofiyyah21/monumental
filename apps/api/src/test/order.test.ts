@@ -487,7 +487,7 @@ describe("customer orders API", () => {
       cancelReason: "Changed my mind",
     });
     expect(cancelResponse.body.data.cancelledAt).toEqual(expect.any(String));
-    expect(cancelResponse.body.data.cancelledById).toBe(customer.user.id);
+    expect(cancelResponse.body.data.cancelledById).toBeUndefined();
 
     await request(app)
       .post(`/api/v1/orders/${orderResponse.body.data.id}/cancel`)
