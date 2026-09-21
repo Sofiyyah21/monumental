@@ -552,6 +552,22 @@ export const openApiDocument = {
         },
       },
     },
+    "/ready": {
+      get: {
+        tags: ["Health"],
+        summary: "Check API readiness",
+        description:
+          "Verifies that required dependencies, including PostgreSQL, are reachable without exposing internal connection details.",
+        responses: {
+          "200": {
+            description: "API is ready to serve traffic",
+          },
+          "503": {
+            description: "API dependencies are not ready",
+          },
+        },
+      },
+    },
     "/auth/register": {
       post: {
         tags: ["Auth"],
