@@ -323,7 +323,7 @@ describe("authentication and authorization", () => {
       .set("Origin", "https://evil.example")
       .set("Cookie", "md_refresh_token=invalid")
       .expect(403);
-    expect(response.body.error.code).toBe("CSRF_ORIGIN_INVALID");
+    expect(response.body.error.code).toBe("CORS_DENIED");
   });
 
   it("allows admin-only user management for admins", async () => {

@@ -17,6 +17,18 @@ describe("app", () => {
     });
   });
 
+  it("rejects oversized JSON request bodies", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        email: "oversized@example.com",
+        password: "x".repeat(120_000),
+      })
+      .expect(413);
+
+    expect(response.body.error.code).toBe("REQUEST_TOO_LARGE");
+  });
+
   it("requires authentication for internal product APIs", async () => {
     const response = await request(app).get("/api/v1/products").expect(401);
 

@@ -1,5 +1,5 @@
 import type { CookieOptions, Request, Response } from "express";
-import { getEnv } from "../config/env.js";
+import { getEnv, parseCorsOrigins } from "../config/env.js";
 import { AppError } from "./app-error.js";
 
 export function getRefreshTokenCookie(req: Request) {
@@ -39,7 +39,8 @@ export function assertTrustedCookieRequest(req: Request) {
     return;
   }
 
-  if (origin !== getEnv().CORS_ORIGIN) {
+  const trustedOrigins = parseCorsOrigins(getEnv().CORS_ORIGIN ?? "");
+  if (!trustedOrigins.includes(origin)) {
     throw new AppError(
       "Cookie-authenticated request came from an untrusted origin",
       403,

@@ -6,6 +6,7 @@ export const notFoundHandler: RequestHandler = (req, res) => {
     error: {
       code: "NOT_FOUND",
       message: `No route found for ${req.method} ${req.path}`,
+      requestId: req.requestId,
     },
   });
 };

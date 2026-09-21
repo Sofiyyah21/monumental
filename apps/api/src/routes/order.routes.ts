@@ -15,6 +15,7 @@ import {
 export function createOrderRoutes(
   controller: OrderController,
   authenticateRequest: RequestHandler = authenticate,
+  orderRateLimit: RequestHandler = (_req, _res, next) => next(),
 ) {
   const router = Router();
 
@@ -57,6 +58,7 @@ export function createOrderRoutes(
   router.post(
     "/",
     authenticateRequest,
+    orderRateLimit,
     validate({ body: createOrderSchema }),
     asyncHandler(controller.create),
   );

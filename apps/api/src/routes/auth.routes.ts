@@ -14,21 +14,24 @@ import {
 export function createAuthRoutes(
   controller: AuthController,
   authenticateRequest: RequestHandler = authenticate,
+  authRateLimit: RequestHandler = (_req, _res, next) => next(),
 ) {
   const router = Router();
 
   router.post(
     "/register",
+    authRateLimit,
     validate({ body: registerCustomerSchema }),
     asyncHandler(controller.registerCustomer),
   );
   router.post(
     "/login",
+    authRateLimit,
     validate({ body: loginSchema }),
     asyncHandler(controller.login),
   );
-  router.post("/refresh", asyncHandler(controller.refresh));
-  router.post("/logout", asyncHandler(controller.logout));
+  router.post("/refresh", authRateLimit, asyncHandler(controller.refresh));
+  router.post("/logout", authRateLimit, asyncHandler(controller.logout));
   router.get("/me", authenticateRequest, asyncHandler(controller.me));
   router.post(
     "/users",

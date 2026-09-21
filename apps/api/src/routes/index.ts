@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { RequestHandler } from "express";
 import { AuthController } from "../controllers/auth.controller.js";
 import { health } from "../controllers/health.controller.js";
 import { InventoryController } from "../controllers/inventory.controller.js";
@@ -28,6 +29,8 @@ import { createSaleRoutes } from "./sale.routes.js";
 
 export type ApiRouterOptions = {
   notificationProvider?: NotificationProvider;
+  authRateLimit?: RequestHandler;
+  orderRateLimit?: RequestHandler;
 };
 
 export function createApiRouter(
@@ -50,7 +53,14 @@ export function createApiRouter(
   const reportController = new ReportController(new ReportService(db));
 
   router.get("/health", health);
-  router.use("/auth", createAuthRoutes(authController, authenticateRequest));
+  router.use(
+    "/auth",
+    createAuthRoutes(
+      authController,
+      authenticateRequest,
+      options.authRateLimit,
+    ),
+  );
   router.use(
     "/products",
     createProductRoutes(productController, authenticateRequest),
@@ -61,7 +71,11 @@ export function createApiRouter(
   );
   router.use(
     "/orders",
-    createOrderRoutes(orderController, authenticateRequest),
+    createOrderRoutes(
+      orderController,
+      authenticateRequest,
+      options.orderRateLimit,
+    ),
   );
   router.use("/sales", createSaleRoutes(saleController, authenticateRequest));
   router.use(
