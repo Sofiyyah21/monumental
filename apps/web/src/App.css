@@ -203,6 +203,24 @@
   border-color: var(--color-brand);
 }
 
+.auth-switch {
+  color: var(--color-muted);
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+.inline-link {
+  color: var(--color-brand-strong);
+  font-weight: 800;
+  text-decoration-color: rgba(180, 82, 27, 0.35);
+  text-underline-offset: 0.18em;
+}
+
+.inline-link:hover,
+.inline-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
 .button {
   align-items: center;
   border: 1px solid transparent;

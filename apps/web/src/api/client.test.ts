@@ -62,11 +62,98 @@ describe("ApiClient", () => {
         401,
       ),
     );
-    const client = new ApiClient({ tokenStorage: storage, fetchImpl });
+    const client = new ApiClient({
+      baseUrl: "/api/v1",
+      tokenStorage: storage,
+      fetchImpl,
+    });
 
     await expect(client.login("wrong@test", "bad")).rejects.toBeInstanceOf(
       ApiError,
     );
+    expect(storage.read()).toBeNull();
+  });
+
+  it("registers a customer account without storing tokens or sending extra fields", async () => {
+    const storage = new MemoryTokenStorage();
+    const customer = {
+      id: "customer_1",
+      email: "ada@example.com",
+      name: "Ada Customer",
+      role: "CUSTOMER",
+    } as const;
+    const requests: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push([input, init]);
+        return jsonResponse({
+          success: true,
+          data: customer,
+        });
+      },
+    );
+    const client = new ApiClient({
+      baseUrl: "https://api.test/api/v1",
+      tokenStorage: storage,
+      fetchImpl,
+    });
+
+    const result = await client.registerCustomer({
+      name: "Ada Customer",
+      email: "ada@example.com",
+      password: "password123",
+    });
+
+    expect(result).toEqual(customer);
+    expect(storage.read()).toBeNull();
+    expect(requests[0]?.[0]).toBe("https://api.test/api/v1/auth/register");
+    expect(requests[0]?.[1]).toEqual(
+      expect.objectContaining({
+        credentials: "include",
+        method: "POST",
+        body: JSON.stringify({
+          name: "Ada Customer",
+          email: "ada@example.com",
+          password: "password123",
+        }),
+      }),
+    );
+    const requestBody = String(requests[0]?.[1]?.body);
+    expect(requestBody).not.toContain("role");
+    expect(requestBody).not.toContain("accessToken");
+    expect(requestBody).not.toContain("refreshToken");
+  });
+
+  it("surfaces duplicate customer registration failures without storing tokens", async () => {
+    const storage = new MemoryTokenStorage();
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(
+        {
+          success: false,
+          error: {
+            code: "USER_EXISTS",
+            message: "A user with this email already exists",
+          },
+        },
+        409,
+      ),
+    );
+    const client = new ApiClient({
+      baseUrl: "/api/v1",
+      tokenStorage: storage,
+      fetchImpl,
+    });
+
+    await expect(
+      client.registerCustomer({
+        name: "Ada Customer",
+        email: "ada@example.com",
+        password: "password123",
+      }),
+    ).rejects.toMatchObject({
+      code: "USER_EXISTS",
+      status: 409,
+    });
     expect(storage.read()).toBeNull();
   });
 
@@ -130,7 +217,11 @@ describe("ApiClient", () => {
           }, 0);
         }),
     );
-    const client = new ApiClient({ tokenStorage: storage, fetchImpl });
+    const client = new ApiClient({
+      baseUrl: "/api/v1",
+      tokenStorage: storage,
+      fetchImpl,
+    });
 
     const [first, second] = await Promise.all([
       client.refreshSession(),
@@ -180,7 +271,11 @@ describe("ApiClient", () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async () => new Response(null, { status: 204 }),
     );
-    const client = new ApiClient({ tokenStorage: storage, fetchImpl });
+    const client = new ApiClient({
+      baseUrl: "/api/v1",
+      tokenStorage: storage,
+      fetchImpl,
+    });
 
     await client.logout();
 

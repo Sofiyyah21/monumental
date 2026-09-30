@@ -2,8 +2,15 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "../auth/useAuth";
 import { Alert } from "../components/Feedback";
 import { Logo } from "../components/Logo";
+import { navigate } from "../routing/useBrowserRoute";
 
-export function LoginPage({ onAuthenticated }: { onAuthenticated(): void }) {
+export function LoginPage({
+  onAuthenticated,
+  successMessage,
+}: {
+  onAuthenticated(): void;
+  successMessage?: string | null;
+}) {
   const auth = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +29,39 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated(): void }) {
   }
 
   return (
+    <LoginView
+      email={email}
+      onEmailChange={setEmail}
+      onPasswordChange={setPassword}
+      onSubmit={submit}
+      password={password}
+      submitError={submitError}
+      submitting={auth.status === "loading"}
+      successMessage={successMessage ?? null}
+    />
+  );
+}
+
+export function LoginView({
+  email,
+  onEmailChange,
+  onPasswordChange,
+  onSubmit,
+  password,
+  submitError,
+  submitting,
+  successMessage,
+}: {
+  email: string;
+  onEmailChange(value: string): void;
+  onPasswordChange(value: string): void;
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  password: string;
+  submitError: string | null;
+  submitting: boolean;
+  successMessage: string | null;
+}) {
+  return (
     <main className="login-screen">
       <section className="login-panel" aria-labelledby="login-title">
         <Logo />
@@ -37,14 +77,20 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated(): void }) {
           <Alert title="Unable to sign in">{submitError}</Alert>
         ) : null}
 
-        <form className="form-stack" onSubmit={submit}>
+        {successMessage ? (
+          <Alert title="Account created" variant="info">
+            {successMessage}
+          </Alert>
+        ) : null}
+
+        <form className="form-stack" onSubmit={onSubmit}>
           <label>
             <span>Email address</span>
             <input
               autoComplete="email"
               inputMode="email"
               name="email"
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => onEmailChange(event.target.value)}
               required
               type="email"
               value={email}
@@ -55,7 +101,7 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated(): void }) {
             <input
               autoComplete="current-password"
               name="password"
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => onPasswordChange(event.target.value)}
               required
               type="password"
               value={password}
@@ -63,12 +109,26 @@ export function LoginPage({ onAuthenticated }: { onAuthenticated(): void }) {
           </label>
           <button
             className="button button--primary"
-            disabled={auth.status === "loading"}
+            disabled={submitting}
             type="submit"
           >
-            {auth.status === "loading" ? "Signing in" : "Sign in"}
+            {submitting ? "Signing in" : "Sign in"}
           </button>
         </form>
+
+        <p className="auth-switch">
+          Don&apos;t have an account?{" "}
+          <a
+            className="inline-link"
+            href="/signup"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate("/signup");
+            }}
+          >
+            Sign up
+          </a>
+        </p>
       </section>
     </main>
   );

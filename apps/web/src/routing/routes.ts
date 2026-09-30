@@ -13,6 +13,7 @@ export type AppRoute = {
 
 type RouteKey =
   | "login"
+  | "signup"
   | "admin"
   | "products"
   | "inventory"
@@ -34,6 +35,12 @@ export const routes: Record<RouteKey, AppRoute> = {
     path: "/login",
     title: "Sign in",
     description: "Access Monumental Details.",
+    requiresAuth: false,
+  },
+  signup: {
+    path: "/signup",
+    title: "Create account",
+    description: "Create a customer account for Monumental Details.",
     requiresAuth: false,
   },
   admin: {

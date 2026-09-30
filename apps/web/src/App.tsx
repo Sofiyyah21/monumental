@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
 import { AppShell } from "./components/AppShell";
@@ -19,6 +19,7 @@ import {
 import { FoundationPage } from "./pages/FoundationPage";
 import { ForbiddenPage } from "./pages/ForbiddenPage";
 import { LoginPage } from "./pages/LoginPage";
+import { SignUpPage } from "./pages/SignUpPage";
 import { ProductPage } from "./products/ProductPage";
 import {
   canAccessRoute,
@@ -34,6 +35,9 @@ import "./App.css";
 function AppRoutes() {
   const auth = useAuth();
   const { pathname, navigate, replace } = useBrowserRoute();
+  const [registrationNotice, setRegistrationNotice] = useState<string | null>(
+    null,
+  );
   const activeRoute = findRoute(pathname);
 
   useEffect(() => {
@@ -41,12 +45,15 @@ function AppRoutes() {
       return;
     }
 
-    if (auth.status === "unauthenticated" && pathname !== routes.login.path) {
+    const isPublicAuthRoute =
+      pathname === routes.login.path || pathname === routes.signup.path;
+
+    if (auth.status === "unauthenticated" && !isPublicAuthRoute) {
       replace(routes.login.path);
       return;
     }
 
-    if (auth.user && (pathname === "/" || pathname === routes.login.path)) {
+    if (auth.user && (pathname === "/" || isPublicAuthRoute)) {
       replace(getDefaultRouteForUser(auth.user));
     }
   }, [auth.status, auth.user, pathname, replace]);
@@ -56,9 +63,24 @@ function AppRoutes() {
   }
 
   if (auth.status === "unauthenticated") {
+    if (pathname === routes.signup.path) {
+      return (
+        <SignUpPage
+          onRegistered={() => {
+            setRegistrationNotice(
+              "Account created successfully. Please sign in.",
+            );
+            replace(routes.login.path);
+          }}
+        />
+      );
+    }
+
     return (
       <LoginPage
+        successMessage={registrationNotice}
         onAuthenticated={() => {
+          setRegistrationNotice(null);
           if (auth.user) {
             replace(getDefaultRouteForUser(auth.user));
           }
@@ -71,7 +93,11 @@ function AppRoutes() {
     return <LoadingState message="Preparing workspace" />;
   }
 
-  if (!activeRoute || activeRoute.path === routes.login.path) {
+  if (
+    !activeRoute ||
+    activeRoute.path === routes.login.path ||
+    activeRoute.path === routes.signup.path
+  ) {
     return <LoadingState message="Opening workspace" />;
   }
 

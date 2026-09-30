@@ -22,6 +22,7 @@ function user(role: UserRole): CurrentUser {
 describe("route authorization", () => {
   it("requires authentication for protected application routes", () => {
     expect(canAccessRoute(null, routes.login)).toBe(true);
+    expect(canAccessRoute(null, routes.signup)).toBe(true);
     expect(canAccessRoute(null, routes.sales)).toBe(false);
     expect(canAccessRoute(null, routes.admin)).toBe(false);
   });
@@ -134,6 +135,7 @@ describe("route authorization", () => {
   });
 
   it("recognizes sales history and dynamic sale detail routes", () => {
+    expect(findRoute("/signup")).toBe(routes.signup);
     expect(findRoute("/sales/history")).toBe(routes.salesHistory);
     expect(findRoute("/sales/sale_1")).toBe(routes.saleDetail);
     expect(findRoute("/orders")).toBe(routes.orders);

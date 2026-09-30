@@ -18,6 +18,7 @@ import type {
   ProductFilters,
   ProductInput,
   ProductUpdateInput,
+  RegisterCustomerInput,
   Order,
   OrderFilters,
   ReportPeriod,
@@ -93,6 +94,14 @@ export class ApiClient {
     });
     this.setSession(auth);
     return auth;
+  }
+
+  async registerCustomer(input: RegisterCustomerInput) {
+    return this.request<CurrentUser>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(input),
+      retryOnUnauthorized: false,
+    });
   }
 
   async logout() {

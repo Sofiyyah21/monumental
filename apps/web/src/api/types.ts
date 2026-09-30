@@ -37,6 +37,12 @@ export type AuthResponse = {
   accessToken: string;
 };
 
+export type RegisterCustomerInput = {
+  name: string;
+  email: string;
+  password: string;
+};
+
 export type ReportPeriod = "today" | "week" | "month" | "year";
 export type DashboardPeriod = ReportPeriod | "custom";
 
