@@ -9,7 +9,7 @@ export type AuthContextValue = {
   role: UserRole | null;
   permissions: Permission[];
   error: string | null;
-  login(email: string, password: string): Promise<void>;
+  login(email: string, password: string): Promise<CurrentUser>;
   logout(): Promise<void>;
   refreshUser(): Promise<void>;
   hasPermission(permission: Permission): boolean;

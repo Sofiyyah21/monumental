@@ -68,6 +68,7 @@ export function AuthProvider({
       try {
         const auth = await client.login(email, password);
         setAuthenticatedUser(auth.user);
+        return auth.user;
       } catch (loginError) {
         clearAuthState();
         setError(

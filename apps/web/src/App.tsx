@@ -79,11 +79,9 @@ function AppRoutes() {
     return (
       <LoginPage
         successMessage={registrationNotice}
-        onAuthenticated={() => {
+        onAuthenticated={(user) => {
           setRegistrationNotice(null);
-          if (auth.user) {
-            replace(getDefaultRouteForUser(auth.user));
-          }
+          replace(getDefaultRouteForUser(user));
         }}
       />
     );

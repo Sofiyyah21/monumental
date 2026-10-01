@@ -3,12 +3,14 @@ import { useAuth } from "../auth/useAuth";
 import { Alert } from "../components/Feedback";
 import { Logo } from "../components/Logo";
 import { navigate } from "../routing/useBrowserRoute";
+import { submitLoginCredentials } from "./login-flow";
+import type { CurrentUser } from "../api/types";
 
 export function LoginPage({
   onAuthenticated,
   successMessage,
 }: {
-  onAuthenticated(): void;
+  onAuthenticated(user: CurrentUser): void;
   successMessage?: string | null;
 }) {
   const auth = useAuth();
@@ -20,12 +22,13 @@ export function LoginPage({
     event.preventDefault();
     setSubmitError(null);
 
-    try {
-      await auth.login(email, password);
-      onAuthenticated();
-    } catch {
-      setSubmitError("Check your email and password, then try again.");
-    }
+    await submitLoginCredentials({
+      email,
+      password,
+      login: auth.login,
+      onAuthenticated,
+      onFailure: setSubmitError,
+    });
   }
 
   return (
